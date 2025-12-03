@@ -596,6 +596,11 @@ The signer's certificate is self-signed.
 jarsigner -verify -verbose -certs target\signed-jar-1.0-signed-SNAPSHOT.jar
 ```
 
+**Command Options:**
+- `-verify` - Verify the signed JAR
+- `-verbose` - Show detailed information about each entry
+- `-certs` - Display certificate details
+
 **Successful Output:**
 ```
          156 Tue Dec 03 10:15:32 CET 2025 META-INF/MANIFEST.MF
@@ -608,6 +613,212 @@ sm       456 Tue Dec 03 10:10:00 CET 2025 training/HelloWorld.class
   k = at least one certificate was found in keystore
 
 jar verified.
+
+Warning:
+This jar contains entries whose signer certificate is self-signed.
+```
+
+**Status Flags Explained:**
+- `s` - Signature was verified successfully
+- `m` - Entry is listed in the manifest
+- `k` - At least one certificate was found in the keystore
+- `i` - Entry is ignored (not in manifest, added after signing)
+- `x` - Signature is invalid or cannot be verified
+
+**Simple Verification (No Verbose):**
+```cmd
+jarsigner -verify target\signed-jar-1.0-signed-SNAPSHOT.jar
+```
+
+Successful output:
+```
+jar verified.
+```
+
+Failed output:
+```
+jarsigner: java.lang.SecurityException: Invalid signature file digest for Manifest main attributes
+```
+
+#### Demonstrating Verification Failure
+
+To understand what happens when a JAR is tampered with, you can create a script that modifies a signed JAR and shows the verification failure.
+
+**Create `test-jar-tampering.bat`:**
+```batch
+@echo off
+echo ========================================
+echo JAR Signature Tampering Demonstration
+echo ========================================
+echo.
+
+REM Step 1: Build and sign the JAR
+echo [1] Building JAR...
+cd signed-jar
+call mvn -q clean package
+if errorlevel 1 (
+    echo Build failed!
+    exit /b 1
+)
+
+echo [2] Signing JAR...
+jarsigner -storetype PKCS12 ^
+    -keystore ..\mykeystore.p12 ^
+    -storepass storepass ^
+    -signedjar target\signed-jar-signed.jar ^
+    target\signed-jar-1.0-SNAPSHOT.jar ^
+    mykey 2>nul
+echo     Signed: target\signed-jar-signed.jar
+echo.
+
+REM Step 2: Verify original signature
+echo [3] Verifying ORIGINAL signed JAR...
+jarsigner -verify target\signed-jar-signed.jar
+if errorlevel 1 (
+    echo     FAILED: Original JAR verification failed!
+) else (
+    echo     SUCCESS: Original JAR verified correctly
+)
+echo.
+
+REM Step 3: Create tampered copy
+echo [4] Creating TAMPERED copy...
+copy target\signed-jar-signed.jar target\signed-jar-tampered.jar >nul
+
+REM Extract JAR
+mkdir temp-extract 2>nul
+cd temp-extract
+jar -xf ..\target\signed-jar-tampered.jar
+
+REM Modify a class file (add a space/byte to change it)
+echo. >> training\HelloWorld.class
+
+REM Repackage JAR
+jar -cf ..\target\signed-jar-tampered.jar *
+cd ..
+rmdir /s /q temp-extract
+echo     Created: target\signed-jar-tampered.jar (modified HelloWorld.class)
+echo.
+
+REM Step 4: Verify tampered signature
+echo [5] Verifying TAMPERED JAR...
+echo     Expected: VERIFICATION FAILURE
+echo.
+jarsigner -verify -verbose target\signed-jar-tampered.jar
+if errorlevel 1 (
+    echo.
+    echo     EXPECTED FAILURE: Tampered JAR verification failed!
+    echo     This proves the signature detected the modification.
+) else (
+    echo.
+    echo     UNEXPECTED: Tampered JAR still verified (this should not happen)
+)
+echo.
+
+echo ========================================
+echo Demonstration Complete
+echo ========================================
+echo.
+echo Summary:
+echo   - Original JAR: Signature valid
+echo   - Tampered JAR: Signature invalid
+echo.
+echo This proves that any modification to a signed JAR
+echo will be detected during verification.
+echo ========================================
+
+cd ..
+```
+
+**Run the script:**
+```cmd
+test-jar-tampering.bat
+```
+
+**Expected Output:**
+```
+========================================
+JAR Signature Tampering Demonstration
+========================================
+
+[1] Building JAR...
+[2] Signing JAR...
+    Signed: target\signed-jar-signed.jar
+
+[3] Verifying ORIGINAL signed JAR...
+jar verified.
+    SUCCESS: Original JAR verified correctly
+
+[4] Creating TAMPERED copy...
+    Created: target\signed-jar-tampered.jar (modified HelloWorld.class)
+
+[5] Verifying TAMPERED JAR...
+    Expected: VERIFICATION FAILURE
+
+jarsigner: java.lang.SecurityException: SHA-256 digest error for training/HelloWorld.class
+
+    EXPECTED FAILURE: Tampered JAR verification failed!
+    This proves the signature detected the modification.
+
+========================================
+Demonstration Complete
+========================================
+
+Summary:
+  - Original JAR: Signature valid
+  - Tampered JAR: Signature invalid
+
+This proves that any modification to a signed JAR
+will be detected during verification.
+========================================
+```
+
+#### Alternative Tampering Scenarios
+
+**Scenario 1: Modify a single byte in a class file**
+```batch
+REM After extracting the JAR
+echo X >> training\HelloWorld.class
+```
+
+**Scenario 2: Add a new file (unsigned entry)**
+```batch
+REM After extracting the JAR
+echo Malicious code > training\Malware.class
+jar -cf ..\target\signed-jar-tampered.jar *
+```
+
+When verified, unsigned entries show without the `s` flag:
+```
+sm       456 Tue Dec 03 10:10:00 CET 2025 training/HelloWorld.class
+         123 Tue Dec 03 11:00:00 CET 2025 training/Malware.class
+
+Warning: This jar contains unsigned entries which have not been integrity-checked.
+```
+
+**Scenario 3: Remove META-INF signature files**
+```batch
+REM After extracting
+del META-INF\MYKEY.SF
+del META-INF\MYKEY.RSA
+jar -cf ..\target\signed-jar-tampered.jar *
+```
+
+Verification fails completely:
+```
+jarsigner: unable to verify jar; no manifest found
+```
+
+**Scenario 4: Modify MANIFEST.MF directly**
+```batch
+REM After extracting
+echo Tampered: true >> META-INF\MANIFEST.MF
+jar -cf ..\target\signed-jar-tampered.jar *
+```
+
+Verification fails:
+```
+jarsigner: java.lang.SecurityException: Invalid signature file digest for Manifest main attributes
 ```
 
 **6. Inspect JAR Contents**
