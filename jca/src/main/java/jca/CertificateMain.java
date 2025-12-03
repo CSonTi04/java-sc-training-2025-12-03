@@ -93,7 +93,7 @@ public class CertificateMain {
         var keyStore = KeyStore.getInstance("PKCS12", "BC");
         keyStore.load(null, null);
         keyStore.setKeyEntry("training-key", keyPair.getPrivate(), "changeit".toCharArray(),new X509Certificate[]{cert});
-        try (var fos = Files.newOutputStream(Path.of("training-certificate.p12"))) {
+        try (var fos = Files.newOutputStream(Path.of("training-keystore.p12"))) {
             keyStore.store(fos, "changeit".toCharArray());
         }
     }
