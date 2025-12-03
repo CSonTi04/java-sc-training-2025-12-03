@@ -7,16 +7,18 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.Security;
 import java.security.cert.CertificateException;
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 
 public class CertificateMain {
-    public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchProviderException, OperatorCreationException, CertificateException {
+    public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchProviderException, OperatorCreationException, CertificateException, IOException {
         //bouncy castle-t fel kell venni mint provider
         Security.addProvider(new BouncyCastleProvider());
 
@@ -53,6 +55,9 @@ public class CertificateMain {
                 .getCertificate(certificateBuilder.build(signer));
 
         System.out.println("################################################################################");
+        //olvasható, de nem szabványos formátum
         System.out.println(cert);
+        //DER formátum - bináris
+        Files.write(Path.of("training-certificate.der"), cert.getEncoded());
     }
 }
