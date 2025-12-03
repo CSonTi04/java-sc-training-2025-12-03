@@ -1,21 +1,23 @@
 package jca;
 
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PKCS8Generator;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
+import org.bouncycastle.openssl.jcajce.JceOpenSSLPKCS8EncryptorBuilder;
 import org.bouncycastle.operator.OperatorCreationException;
+import org.bouncycastle.operator.OutputEncryptor;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyPairGenerator;
-import java.security.NoSuchAlgorithmException;
-import java.security.NoSuchProviderException;
-import java.security.Security;
+import java.security.*;
 import java.security.cert.CertificateException;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Duration;
 
 public class CertificateMain {
@@ -67,5 +69,24 @@ public class CertificateMain {
             pemWriter.writeObject(cert);
             pemWriter.close();
         }
+
+        Files.write(Path.of("training-certificate-private.der"), keyPair.getPrivate().getEncoded());
+        //Privát kulcs
+        OutputEncryptor encryptor = new JceOpenSSLPKCS8EncryptorBuilder(
+                PKCS8Generator.PBE_SHA1_3DES)
+                .setRandom(new SecureRandom())
+                .setPassword("changeit".toCharArray())
+                .build();
+
+        PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyPair.getPrivate().getEncoded());
+        PrivateKeyInfo pki = PrivateKeyInfo.getInstance(spec.getEncoded());
+        PKCS8Generator gen = new PKCS8Generator(pki, encryptor);
+
+        try (var writer = Files.newBufferedWriter(Path.of("training-certificate-private.pem"))) {
+            var pemWriter = new JcaPEMWriter(writer);
+            pemWriter.writeObject(gen);
+            pemWriter.close();
+        }
+
     }
 }
