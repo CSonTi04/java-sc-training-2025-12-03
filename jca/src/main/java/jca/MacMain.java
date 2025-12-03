@@ -2,6 +2,7 @@ package jca;
 
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
@@ -28,7 +29,9 @@ public class MacMain {
         macVerifier.init(key);
         var verifySignature = macVerifier.doFinal(input);
         System.out.println("VerifySignature: " + HexFormat.of().formatHex(verifySignature));
-        var isValid = Arrays.equals(signature, verifySignature);
+        //ez nem használható biztonságosan, mert időzítéses támadásnak van kitéve
+        //var isValid = Arrays.equals(signature, verifySignature);
+        var isValid = MessageDigest.isEqual(signature, verifySignature);
         System.out.println("Is valid: " + isValid);
     }
 }
