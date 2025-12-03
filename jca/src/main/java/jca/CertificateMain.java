@@ -61,6 +61,7 @@ public class CertificateMain {
         //DER formátum - bináris - windows alatt .cer vagy .der kiterjesztés
         Files.write(Path.of("training-certificate.der"), cert.getEncoded());
         //PEM formátum - Base64 kódolt ASCII - .pem kiterjesztés
+        //ez egy x509 tanusítvány base64-ezve
         try (var writer = Files.newBufferedWriter(Path.of("training-certificate.pem"))) {
             var pemWriter = new JcaPEMWriter(writer);
             pemWriter.writeObject(cert);
