@@ -35,5 +35,10 @@ public class SignMain {
         var hex = HexFormat.of();
         System.out.println(hex.formatHex(signBytes));
         Files.write(Path.of("signature.bin"), signBytes);
+
+        //Egy olyan kilcstár generálása, amiben csak a tanúsítvány van benne
+        //TODO
+
+
     }
 }
