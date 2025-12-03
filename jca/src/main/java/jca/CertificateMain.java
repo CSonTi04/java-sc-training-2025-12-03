@@ -4,6 +4,7 @@ import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 
@@ -57,7 +58,13 @@ public class CertificateMain {
         System.out.println("################################################################################");
         //olvasható, de nem szabványos formátum
         System.out.println(cert);
-        //DER formátum - bináris
+        //DER formátum - bináris - windows alatt .cer vagy .der kiterjesztés
         Files.write(Path.of("training-certificate.der"), cert.getEncoded());
+        //PEM formátum - Base64 kódolt ASCII - .pem kiterjesztés
+        try (var writer = Files.newBufferedWriter(Path.of("training-certificate.pem"))) {
+            var pemWriter = new JcaPEMWriter(writer);
+            pemWriter.writeObject(cert);
+            pemWriter.close();
+        }
     }
 }
