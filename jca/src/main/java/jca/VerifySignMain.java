@@ -32,7 +32,8 @@ public class VerifySignMain {
 
         signature.update(data);
 
-        var signatureBytes = Files.readAllBytes(Path.of("signature.bin"));
+        var signaturePath = Path.of("C:/Repos/java-sc-training-2025-12-03/signature.bin");
+        var signatureBytes = Files.readAllBytes(signaturePath);
         var valid = signature.verify(signatureBytes);
 
         System.out.println("Valid: " + valid);

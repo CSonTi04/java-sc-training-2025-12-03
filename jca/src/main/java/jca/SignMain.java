@@ -34,6 +34,9 @@ public class SignMain {
 
         var hex = HexFormat.of();
         System.out.println(hex.formatHex(signBytes));
-        Files.write(Path.of("signature.bin"), signBytes);
+
+        var signaturePath = Path.of("C:/Repos/java-sc-training-2025-12-03/signature.bin");
+        Files.write(signaturePath, signBytes);
+        System.out.println("Signature written to: " + signaturePath);
     }
 }
