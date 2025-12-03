@@ -18,6 +18,7 @@ This repository contains comprehensive examples and demonstrations of Java's cry
   - [8. Digital Signatures](#8-digital-signatures)
   - [9. Certificates](#9-certificates)
   - [10. Certificate Chains](#10-certificate-chains)
+  - [11. JAR Signing](#11-jar-signing)
 - [Running the Examples](#running-the-examples)
 - [Additional Reading](#additional-reading)
 - [Best Practices](#best-practices)
@@ -51,6 +52,11 @@ jca/
     ├── VerifySignMain.java          # Digital signature verification
     ├── CertificateMain.java         # X.509 certificate generation
     └── CertificateChainMain.java    # Certificate chain creation
+
+signed-jar/
+├── pom.xml
+└── src/main/java/training/
+    └── HelloWorld.java              # Simple class for JAR signing demo
 ```
 
 ## Topics Covered
@@ -434,6 +440,417 @@ Server Certificate → Cannot sign anything
 ```
 Client validates: Server Cert → Intermediate CA → Root CA (trusted)
 ```
+
+### 11. JAR Signing
+
+**Directory:** `signed-jar/`
+
+Demonstrates how to digitally sign Java Archive (JAR) files for code authentication and integrity.
+
+**Key Concepts:**
+- Code signing for Java applications
+- JAR file integrity protection
+- Publisher verification
+- Security policy enforcement
+
+#### What is JAR Signing?
+
+JAR signing is the process of digitally signing a Java Archive file to:
+1. **Verify authenticity** - Proves who created/published the code
+2. **Ensure integrity** - Detects any tampering or modification
+3. **Enable trust** - Allows users to trust and run the application
+4. **Grant permissions** - Required for certain security-sensitive operations
+
+#### How JAR Signing Works
+
+```
+JAR File → Hash each entry → Sign hashes with private key → Add signature to JAR
+                                                                    ↓
+                                                      MANIFEST.MF (file hashes)
+                                                      *.SF (signature file)
+                                                      *.RSA/DSA (signature block)
+```
+
+**Inside a Signed JAR:**
+```
+META-INF/
+  ├── MANIFEST.MF       - Contains SHA-256 hash of each file
+  ├── MYKEY.SF          - Signature file (hash of manifest entries)
+  └── MYKEY.RSA         - Signature block (encrypted with private key)
+```
+
+**Verification Process:**
+1. Extract public key from certificate in `.RSA` file
+2. Verify signature in `.SF` file matches manifest
+3. Verify each file's hash matches the manifest entry
+4. Check certificate validity and trust chain
+
+#### Why Do We Need JAR Signing?
+
+**Security Benefits:**
+- ✅ **Prevents tampering** - Any modification invalidates the signature
+- ✅ **Verifies publisher** - Confirms the code source
+- ✅ **Enables applets** - Required for Java applets with special permissions
+- ✅ **Code trust** - Users can verify the developer's identity
+- ✅ **Policy enforcement** - Java security policies can require signed code
+
+**Real-World Use Cases:**
+- Distributing commercial Java applications
+- Java Web Start applications (now deprecated, but concept lives on)
+- Browser applets (deprecated, but historically important)
+- Enterprise software deployment
+- Plugin systems requiring trusted code
+- Mobile applications (Android APK signing uses similar concepts)
+
+#### Step-by-Step JAR Signing Process
+
+**1. Generate a Key Pair and Certificate**
+
+```cmd
+keytool -genkeypair -dname "cn=Trainer, ou=Training, c=HU" ^
+    -alias mykey ^
+    -keyalg RSA ^
+    -keysize 2048 ^
+    -storetype PKCS12 ^
+    -keystore mykeystore.p12 ^
+    -storepass storepass ^
+    -validity 180
+```
+
+**Parameters Explained:**
+- `-genkeypair` - Generate a public/private key pair
+- `-dname` - Distinguished name (CN=Common Name, OU=Organizational Unit, C=Country)
+- `-alias mykey` - Alias to reference this key in the keystore
+- `-keyalg RSA` - Use RSA algorithm
+- `-keysize 2048` - 2048-bit key (minimum recommended)
+- `-storetype PKCS12` - Modern keystore format (recommended over JKS)
+- `-keystore mykeystore.p12` - Output keystore file
+- `-storepass storepass` - Keystore password (⚠️ use strong password in production!)
+- `-validity 180` - Certificate valid for 180 days
+
+**2. Verify Keystore Contents**
+
+```cmd
+keytool -list -keystore mykeystore.p12 -storepass storepass -v
+```
+
+**Output Example:**
+```
+Keystore type: PKCS12
+Keystore provider: SUN
+
+Your keystore contains 1 entry
+
+Alias name: mykey
+Creation date: Dec 3, 2025
+Entry type: PrivateKeyEntry
+Certificate chain length: 1
+Certificate[1]:
+Owner: CN=Trainer, OU=Training, C=HU
+Issuer: CN=Trainer, OU=Training, C=HU (self-signed)
+Serial number: 5f3e8a9b
+Valid from: Tue Dec 03 10:00:00 CET 2025 until: Mon Jun 01 10:00:00 CEST 2026
+```
+
+**3. Build the JAR File**
+
+```cmd
+cd C:\Repos\java-sc-training-2025-12-03\signed-jar
+mvn clean package
+```
+
+This creates: `target/signed-jar-1.0-SNAPSHOT.jar`
+
+**4. Sign the JAR**
+
+```cmd
+jarsigner -storetype PKCS12 ^
+    -keystore mykeystore.p12 ^
+    -storepass storepass ^
+    -signedjar target\signed-jar-1.0-signed-SNAPSHOT.jar ^
+    target\signed-jar-1.0-SNAPSHOT.jar ^
+    mykey
+```
+
+**Parameters:**
+- `-storetype PKCS12` - Keystore type
+- `-keystore mykeystore.p12` - Path to keystore
+- `-storepass storepass` - Keystore password
+- `-signedjar <output>` - Name for signed JAR (optional, modifies in-place if omitted)
+- `<input.jar>` - Original JAR file
+- `mykey` - Alias of the key to use for signing
+
+**Output:**
+```
+jar signed.
+
+Warning:
+The signer's certificate is self-signed.
+```
+
+⚠️ **Note:** Self-signed certificates trigger warnings. Production code should use certificates from trusted CAs.
+
+**5. Verify the Signature**
+
+```cmd
+jarsigner -verify -verbose -certs target\signed-jar-1.0-signed-SNAPSHOT.jar
+```
+
+**Successful Output:**
+```
+         156 Tue Dec 03 10:15:32 CET 2025 META-INF/MANIFEST.MF
+         234 Tue Dec 03 10:15:32 CET 2025 META-INF/MYKEY.SF
+        1234 Tue Dec 03 10:15:32 CET 2025 META-INF/MYKEY.RSA
+sm       456 Tue Dec 03 10:10:00 CET 2025 training/HelloWorld.class
+
+  s = signature was verified
+  m = entry is listed in manifest
+  k = at least one certificate was found in keystore
+
+jar verified.
+```
+
+**6. Inspect JAR Contents**
+
+```cmd
+jar -tf target\signed-jar-1.0-signed-SNAPSHOT.jar
+```
+
+**Output:**
+```
+META-INF/
+META-INF/MANIFEST.MF
+training/
+training/HelloWorld.class
+META-INF/MYKEY.SF
+META-INF/MYKEY.RSA
+```
+
+#### Understanding the Signature Files
+
+**MANIFEST.MF** - Contains SHA-256 digests of all files:
+```
+Manifest-Version: 1.0
+Created-By: 21.0.4 (Oracle Corporation)
+
+Name: training/HelloWorld.class
+SHA-256-Digest: 3Bf7xK9... (base64 encoded hash)
+```
+
+**MYKEY.SF** - Signature File (hashes of manifest entries):
+```
+Signature-Version: 1.0
+SHA-256-Digest-Manifest: 5Kj8mN2... (hash of entire manifest)
+Created-By: 21.0.4 (Oracle Corporation)
+
+Name: training/HelloWorld.class
+SHA-256-Digest: 7Lp4qR1... (hash of manifest entry for this file)
+```
+
+**MYKEY.RSA** - Signature Block (binary file containing):
+- Signer's certificate (public key)
+- Encrypted hash of the .SF file (using private key)
+- Certificate chain (if applicable)
+
+#### Complete Example with signed-jar Module
+
+**Project Structure:**
+```
+signed-jar/
+├── pom.xml
+└── src/main/java/training/
+    └── HelloWorld.java
+```
+
+**HelloWorld.java:**
+```java
+package training;
+
+public class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Hello from signed JAR!");
+    }
+}
+```
+
+**Full Workflow:**
+```cmd
+REM 1. Create keystore
+keytool -genkeypair -dname "cn=Trainer, ou=Training, c=HU" ^
+    -alias mykey -keyalg RSA -keysize 2048 -storetype PKCS12 ^
+    -keystore mykeystore.p12 -storepass storepass -validity 180
+
+REM 2. Build JAR
+cd signed-jar
+mvn clean package
+
+REM 3. Sign JAR
+jarsigner -storetype PKCS12 -keystore mykeystore.p12 ^
+    -storepass storepass ^
+    -signedjar target\signed-jar-1.0-signed-SNAPSHOT.jar ^
+    target\signed-jar-1.0-SNAPSHOT.jar mykey
+
+REM 4. Verify signature
+jarsigner -verify -verbose -certs target\signed-jar-1.0-signed-SNAPSHOT.jar
+
+REM 5. Run signed JAR
+java -jar target\signed-jar-1.0-signed-SNAPSHOT.jar
+```
+
+#### Timestamp Server (Recommended)
+
+Adding a timestamp ensures the signature remains valid even after the certificate expires:
+
+```cmd
+jarsigner -storetype PKCS12 ^
+    -keystore mykeystore.p12 ^
+    -storepass storepass ^
+    -tsa http://timestamp.digicert.com ^
+    -signedjar target\signed-jar-1.0-signed-SNAPSHOT.jar ^
+    target\signed-jar-1.0-SNAPSHOT.jar ^
+    mykey
+```
+
+**Why Timestamp?**
+- Without timestamp: Signature becomes invalid when certificate expires
+- With timestamp: Signature proves "code was signed while cert was valid"
+
+**Trusted Timestamp Services:**
+- `http://timestamp.digicert.com`
+- `http://timestamp.globalsign.com/tsa/r6advanced1`
+- `http://tsa.starfieldtech.com`
+- `http://timestamp.comodoca.com/rfc3161`
+
+#### Production Best Practices
+
+**Certificate Management:**
+- ✅ Use certificates from trusted Certificate Authorities (CA)
+- ✅ Use organization-validated (OV) or extended-validated (EV) certificates
+- ✅ Set appropriate validity periods (1-3 years typical)
+- ✅ Renew certificates before expiration
+- ✅ Use separate certificates for different products
+
+**Key Protection:**
+- ✅ Use strong keystore passwords (16+ characters)
+- ✅ Store keystores in secure, access-controlled locations
+- ✅ Use Hardware Security Modules (HSM) for high-value keys
+- ✅ Implement key rotation policies
+- ✅ Backup keystores securely
+- ❌ Never commit keystores to version control
+- ❌ Never share private keys
+
+**Signing Process:**
+- ✅ Always use timestamp servers
+- ✅ Verify signatures after signing
+- ✅ Keep audit logs of signing operations
+- ✅ Use build automation for consistent signing
+- ✅ Sign all JARs in a multi-JAR application
+
+**Distribution:**
+- ✅ Provide public certificate for users to verify
+- ✅ Document signature verification steps
+- ✅ Use HTTPS for JAR distribution
+- ✅ Provide checksums (SHA-256) alongside JARs
+
+#### Security Considerations
+
+**What JAR Signing Does NOT Do:**
+- ❌ Does not encrypt the code (code is still readable)
+- ❌ Does not prevent reverse engineering
+- ❌ Does not guarantee the code is safe/malware-free
+- ❌ Does not protect runtime memory or data
+
+**What JAR Signing DOES:**
+- ✅ Proves the publisher's identity
+- ✅ Detects any tampering after signing
+- ✅ Enables Java security policies
+- ✅ Provides non-repudiation
+
+**Potential Issues:**
+- Self-signed certificates → Users see warnings
+- Expired certificates → Signatures become invalid (without timestamp)
+- Revoked certificates → Signatures no longer trusted
+- Weak algorithms (SHA-1, RSA-1024) → Security vulnerabilities
+
+#### Maven Plugin Alternative
+
+You can automate JAR signing in your build process:
+
+**pom.xml:**
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jarsigner-plugin</artifactId>
+            <version>3.0.0</version>
+            <executions>
+                <execution>
+                    <id>sign</id>
+                    <goals>
+                        <goal>sign</goal>
+                    </goals>
+                </execution>
+                <execution>
+                    <id>verify</id>
+                    <goals>
+                        <goal>verify</goal>
+                    </goals>
+                </execution>
+            </executions>
+            <configuration>
+                <keystore>mykeystore.p12</keystore>
+                <alias>mykey</alias>
+                <storepass>storepass</storepass>
+                <tsa>http://timestamp.digicert.com</tsa>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+```
+
+Then simply run:
+```cmd
+mvn clean package
+```
+
+The JAR will be automatically signed during the build.
+
+#### Additional Reading - JAR Signing
+
+**Official Documentation:**
+- [Oracle JAR Signing Guide](https://docs.oracle.com/javase/tutorial/deployment/jar/signing.html)
+- [jarsigner Tool Reference](https://docs.oracle.com/en/java/javase/21/docs/specs/man/jarsigner.html)
+- [keytool Documentation](https://docs.oracle.com/en/java/javase/21/docs/specs/man/keytool.html)
+- [JAR File Specification](https://docs.oracle.com/javase/8/docs/technotes/guides/jar/jar.html)
+
+**Standards:**
+- [RFC 2315 - PKCS #7: Cryptographic Message Syntax](https://tools.ietf.org/html/rfc2315)
+- [RFC 5652 - Cryptographic Message Syntax (CMS)](https://tools.ietf.org/html/rfc5652)
+- [RFC 3161 - Time-Stamp Protocol (TSP)](https://tools.ietf.org/html/rfc3161)
+
+**Code Signing Best Practices:**
+- [Oracle Code Signing for Java Developers](https://www.oracle.com/java/technologies/javase/seccodeguide.html)
+- [NIST Guidelines on Software Integrity](https://csrc.nist.gov/publications/detail/sp/800-218/final)
+- [Microsoft Trusted Root Program Requirements](https://docs.microsoft.com/en-us/security/trusted-root/program-requirements)
+- [DigiCert Code Signing Best Practices](https://www.digicert.com/kb/code-signing/code-signing-best-practices.htm)
+
+**Related Topics:**
+- [Android APK Signing](https://developer.android.com/studio/publish/app-signing) - Similar concept for Android apps
+- [Windows Authenticode](https://docs.microsoft.com/en-us/windows-hardware/drivers/install/authenticode) - Code signing for Windows
+- [Apple Code Signing](https://developer.apple.com/support/code-signing/) - macOS/iOS code signing
+- [Sigstore](https://www.sigstore.dev/) - New standard for signing, verification, and provenance
+
+**Tools:**
+- [Maven JAR Signer Plugin](https://maven.apache.org/plugins/maven-jarsigner-plugin/)
+- [Gradle Signing Plugin](https://docs.gradle.org/current/userguide/signing_plugin.html)
+- [KeyStore Explorer](https://keystore-explorer.org/) - GUI for managing keystores
+- [Portecle](http://portecle.sourceforge.net/) - User-friendly keystore tool
+
+**Security Research:**
+- [JAR Hell and ClassLoader Issues](https://blog.oio.de/2014/01/31/java-jar-hell/)
+- [Common JAR Signing Mistakes](https://tersesystems.com/blog/2018/09/08/jar-signing/)
+- [Certificate Pinning](https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning)
 
 ## Running the Examples
 
