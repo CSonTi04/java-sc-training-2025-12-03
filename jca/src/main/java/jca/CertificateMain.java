@@ -17,11 +17,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.*;
 import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Duration;
 
 public class CertificateMain {
-    public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchProviderException, OperatorCreationException, CertificateException, IOException {
+    public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchProviderException, OperatorCreationException, CertificateException, IOException, KeyStoreException {
         //bouncy castle-t fel kell venni mint provider
         Security.addProvider(new BouncyCastleProvider());
 
@@ -88,5 +89,12 @@ public class CertificateMain {
             pemWriter.close();
         }
 
+        //Tanúsítvány és kulcs pár mentése PKCS#12 keystore formátumban
+        var keyStore = KeyStore.getInstance("PKCS12", "BC");
+        keyStore.load(null, null);
+        keyStore.setKeyEntry("training-key", keyPair.getPrivate(), "changeit".toCharArray(),new X509Certificate[]{cert});
+        try (var fos = Files.newOutputStream(Path.of("training-certificate.p12"))) {
+            keyStore.store(fos, "changeit".toCharArray());
+        }
     }
 }
