@@ -1,0 +1,58 @@
+package jca;
+
+import org.bouncycastle.asn1.x500.X500Name;
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.operator.OperatorCreationException;
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
+
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.Security;
+import java.security.cert.CertificateException;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
+
+public class CertificateMain {
+    public static void main(String[] args) throws NoSuchAlgorithmException, NoSuchProviderException, OperatorCreationException, CertificateException {
+        //bouncy castle-t fel kell venni mint provider
+        Security.addProvider(new BouncyCastleProvider());
+
+        var generator = KeyPairGenerator.getInstance("RSA", "BC");
+        generator.initialize(2048);
+        var keyPair = generator.generateKeyPair();
+
+        //leíró információk létrehozása - X,500-as szabvány szerint
+        var distinguishedName = new X500Name("CN=TrainingSelfSignedCertificate, O=MyOrganization, C=HU");
+        var sysDate = System.currentTimeMillis();
+        var serialNumber = java.math.BigInteger.valueOf(sysDate);
+        var start = new java.util.Date(sysDate);
+        var end = new java.util.Date(sysDate + Duration.ofDays(365).toMillis()); //1 év múlva lejár
+
+        //Tanúsítvány létrehozása
+        var certificateBuilder = new JcaX509v3CertificateBuilder(
+                distinguishedName,
+                serialNumber,
+                start,
+                end,
+                distinguishedName,
+                keyPair.getPublic()
+        );
+
+        //aláírás
+        var signer = new JcaContentSignerBuilder("SHA256withRSA").setProvider("BC").build(keyPair.getPrivate());
+
+        var holder = certificateBuilder.build(signer).toASN1Structure();
+        System.out.println(holder);
+
+        //X509 tanúsítvány létrehozása - ez megint Java SE
+
+        var cert = new JcaX509CertificateConverter().setProvider("BC")
+                .getCertificate(certificateBuilder.build(signer));
+
+        System.out.println("################################################################################");
+        System.out.println(cert);
+    }
+}
