@@ -11,6 +11,7 @@ public class KeysMain {
         var secretKey = keyGenerator.generateKey();
         var hexEncoded = HexFormat.of();
         var formattedHex = hexEncoded.formatHex(secretKey.getEncoded());
+        //itt jön a bitkolbász :D
         System.out.println("Generated AES Key (Hex): " + formattedHex);
     }
 }
