@@ -1,2 +1,15 @@
 target/
 .idea/
+
+# Certificates and Keys (Security sensitive files)
+*.p12
+*.p7b
+*.der
+*.pem
+*.jks
+*.keystore
+*.bin
+mykeystore.*
+*keystore.*
+*-certificate*
+chain.*
