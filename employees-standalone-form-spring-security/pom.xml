@@ -10,7 +10,7 @@
 	</parent>
 
 	<groupId>training</groupId>
-	<artifactId>employees-standalone</artifactId>
+	<artifactId>employees-standalone-form-spring-security</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 
     <properties>
