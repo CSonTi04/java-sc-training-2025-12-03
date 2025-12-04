@@ -20,6 +20,11 @@ This repository contains comprehensive examples and demonstrations of Java's cry
   - [10. Certificate Chains](#10-certificate-chains)
   - [11. JAR Signing](#11-jar-signing)
   - [12. HTTPS/TLS Certificates](#12-httpstls-certificates)
+- [Employee Management Projects](#employee-management-projects)
+  - [Architecture Overview](#architecture-overview)
+  - [employees-backend](#employees-backend)
+  - [employees-frontend](#employees-frontend)
+  - [employees-standalone-form](#employees-standalone-form)
 - [Running the Examples](#running-the-examples)
 - [Additional Reading](#additional-reading)
 - [Best Practices](#best-practices)
@@ -65,6 +70,51 @@ hello-boot-https/
 │   └── HelloBootHttpsApplication.java  # Spring Boot HTTPS demo
 └── src/main/resources/
     └── application.properties       # HTTPS/TLS configuration
+
+employees-backend/
+├── pom.xml
+├── src/main/java/employees/
+│   ├── EmployeesApplication.java       # Spring Boot REST API backend
+│   ├── EmployeesController.java        # REST endpoints (GET, POST, PUT, DELETE)
+│   ├── EmployeesService.java           # Business logic layer
+│   ├── EmployeesRepository.java        # Database persistence (JPA)
+│   ├── Employee.java                   # Entity model
+│   ├── EmployeeResource.java           # DTO for API responses
+│   ├── EmployeeNotFoundException.java   # Custom exception
+│   ├── EmployeesExceptionHandler.java  # Global exception handling
+│   └── Violation.java                  # Validation error details
+└── src/main/resources/
+    └── db/changelog/                   # Liquibase database migrations
+
+employees-frontend/
+├── pom.xml
+├── src/main/java/employees/
+│   ├── EmployeesFrontendApplication.java  # Spring Boot Thymeleaf frontend
+│   ├── EmployeesController.java           # Web UI controller
+│   ├── EmployeesClient.java               # REST client for backend API
+│   ├── EmployeesProperties.java           # Configuration properties
+│   ├── ClientConfig.java                  # HTTP client configuration
+│   └── Employee.java                      # DTO model
+└── src/main/resources/
+    ├── templates/                         # Thymeleaf HTML templates
+    ├── static/                            # CSS, JavaScript, images
+    └── application.properties             # Frontend configuration
+
+employees-standalone-form/
+├── pom.xml
+├── src/main/java/employees/
+│   ├── EmployeesApplication.java          # Spring Boot standalone form app
+│   ├── EmployeesController.java           # Web UI controller with JPA
+│   ├── EmployeesService.java              # Business logic layer
+│   ├── EmployeesRepository.java           # Database persistence (JPA)
+│   ├── Employee.java                      # Entity model
+│   ├── EmployeeModel.java                 # Form model
+│   └── EmployeeNotFoundException.java      # Custom exception
+└── src/main/resources/
+    ├── templates/                         # Thymeleaf HTML templates with forms
+    ├── static/                            # CSS, JavaScript, images
+    ├── db/changelog/                      # Liquibase database migrations
+    └── application.properties             # Configuration properties
 ```
 
 ## Topics Covered
@@ -1872,12 +1922,637 @@ Browser cache showing old certificate
 - [OWASP Transport Layer Protection](https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Protection_Cheat_Sheet.html)
 - [Qualys SSL/TLS Deployment Best Practices](https://github.com/ssllabs/research/wiki/SSL-and-TLS-Deployment-Best-Practices)
 
+- [Qualys SSL/TLS Deployment Best Practices](https://github.com/ssllabs/research/wiki/SSL-and-TLS-Deployment-Best-Practices)
+
 **Certificate Authorities:**
 - [Let's Encrypt](https://letsencrypt.org/) - Free, automated
 - [ZeroSSL](https://zerossl.com/) - Free alternative
 - [DigiCert](https://www.digicert.com/) - Commercial, EV certificates
 - [GlobalSign](https://www.globalsign.com/) - Commercial
 - [Sectigo (formerly Comodo)](https://sectigo.com/) - Commercial
+
+## Employee Management Projects
+
+This section covers three Spring Boot applications that demonstrate real-world web application architecture, from REST APIs to full-stack web applications with different deployment patterns.
+
+### Architecture Overview
+
+These three projects showcase different architectural patterns for building employee management systems:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Architecture Comparison                       │
+└─────────────────────────────────────────────────────────────────┘
+
+employees-backend (Microservice Pattern)
+├── REST API only (no UI)
+├── Stateless backend
+├── Database: PostgreSQL
+├── API Endpoints: /api/employees/*
+└── Port: 8080
+
+employees-frontend (Separation of Concerns)
+├── Web UI (Thymeleaf templates)
+├── HTTP client for backend API
+├── Calls employees-backend via REST
+├── Database: None (stateless)
+└── Port: 8081
+
+employees-standalone-form (Monolithic Pattern)
+├── Full stack: UI + Business Logic + Database
+├── Single deployable JAR
+├── Embedded forms with direct database access
+├── Database: PostgreSQL
+└── Port: 8080
+```
+
+**Key Differences:**
+
+| Aspect           | employees-backend               | employees-frontend     | employees-standalone-form             |
+|------------------|---------------------------------|------------------------|---------------------------------------|
+| **Architecture** | Microservice (API-only)         | Frontend tier          | Monolithic                            |
+| **UI**           | None                            | Thymeleaf              | Thymeleaf                             |
+| **Database**     | PostgreSQL                      | None                   | PostgreSQL                            |
+| **Dependencies** | Spring Data JPA, Liquibase      | Spring Web, Thymeleaf  | Spring Data JPA, Thymeleaf, Liquibase |
+| **Deployment**   | Standalone service              | Standalone service     | Single JAR                            |
+| **Port**         | 8080                            | 8081                   | 8080                                  |
+| **Use Case**     | Mobile apps, multiple frontends | Web UI for backend API | Prototype, small apps                 |
+| **Scalability**  | High (separation of concerns)   | Medium (stateless)     | Low (monolithic)                      |
+
+### employees-backend
+
+**Directory:** `employees-backend/`
+
+A RESTful API backend for managing employees. This is a pure backend service with no UI, designed to be consumed by multiple frontend applications.
+
+**Technologies:**
+- Spring Boot 3.5.8
+- Spring Data JPA (database access)
+- Spring Validation
+- PostgreSQL (database)
+- Liquibase (database migrations)
+- Lombok (code generation)
+
+**Key Features:**
+
+1. **REST API Endpoints**
+   - `GET /api/employees` - List all employees
+   - `GET /api/employees/{id}` - Get employee by ID
+   - `POST /api/employees` - Create new employee
+   - `PUT /api/employees/{id}` - Update employee
+   - `DELETE /api/employees/{id}` - Delete employee
+
+2. **Database Layer**
+   - JPA Entity: `Employee`
+   - Repository: `EmployeesRepository` (Spring Data)
+   - Migrations: Liquibase changesets in `db/changelog/`
+
+3. **Business Logic**
+   - Service class: `EmployeesService`
+   - Encapsulates business operations
+   - Transaction management
+
+4. **API Contract**
+   - `EmployeeResource` - DTO for API responses
+   - Request/response validation
+   - Consistent error handling
+
+5. **Exception Handling**
+   - `EmployeeNotFoundException` - Custom exception for missing resources
+   - `EmployeesExceptionHandler` - Global exception handler
+   - `Violation` - Validation error details
+   - HTTP 404, 400, 500 responses
+
+**Database Schema (Managed by Liquibase):**
+
+```sql
+CREATE TABLE employees (
+    id BIGINT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    department VARCHAR(255),
+    salary DECIMAL(10, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Configuration (application.properties):**
+
+```properties
+spring.application.name=employees-backend
+server.port=8080
+
+# Database
+spring.datasource.url=jdbc:postgresql://localhost:5432/employees
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.hibernate.ddl-auto=validate
+
+# Liquibase
+spring.liquibase.enabled=true
+spring.liquibase.change-log=classpath:db/changelog/db.changelog-master.xml
+```
+
+**Example API Usage:**
+
+```bash
+# Create employee
+curl -X POST http://localhost:8080/api/employees \
+  -H "Content-Type: application/json" \
+  -d '{"name":"John Doe","email":"john@example.com","department":"IT"}'
+
+# Get employee
+curl http://localhost:8080/api/employees/1
+
+# Update employee
+curl -X PUT http://localhost:8080/api/employees/1 \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Jane Doe","department":"HR"}'
+
+# Delete employee
+curl -X DELETE http://localhost:8080/api/employees/1
+```
+
+**Running employees-backend:**
+
+```cmd
+cd employees-backend
+mvn spring-boot:run
+
+# Or with Maven wrapper
+./mvnw spring-boot:run
+```
+
+**Testing the API:**
+
+```cmd
+# Check if service is running
+curl http://localhost:8080/api/employees
+
+# Check actuator endpoints
+curl http://localhost:8080/actuator/health
+```
+
+### employees-frontend
+
+**Directory:** `employees-frontend/`
+
+A web-based frontend application that consumes the employees-backend REST API. This demonstrates the separation of concerns pattern with independent backend and frontend services.
+
+**Technologies:**
+- Spring Boot 3.5.8
+- Spring Web (MVC)
+- Spring Actuator (monitoring)
+- Thymeleaf (server-side templating)
+- RestTemplate or WebClient (HTTP client)
+- Lombok (code generation)
+
+**Key Features:**
+
+1. **Web UI Controller**
+   - Renders HTML templates with Thymeleaf
+   - Handles form submissions
+   - Model-View-Controller pattern
+
+2. **REST Client**
+   - `EmployeesClient` - Communicates with backend API
+   - HTTP error handling
+   - Response mapping to DTOs
+
+3. **Configuration Management**
+   - `EmployeesProperties` - Configuration properties
+   - `ClientConfig` - HTTP client setup (timeouts, retries)
+   - Configurable backend URL
+
+4. **Thymeleaf Templates**
+   - `index.html` - Employee list view
+   - `create.html` - Create employee form
+   - `edit.html` - Edit employee form
+
+5. **Static Assets**
+   - CSS for styling
+   - Bootstrap integration (optional)
+   - JavaScript for interactivity
+
+**Configuration (application.properties):**
+
+```properties
+spring.application.name=employees-frontend
+server.port=8081
+
+# Backend API configuration
+employees.api.url=http://localhost:8080/api
+
+# HTTP client timeouts
+spring.http.client.read-timeout=5000
+spring.http.client.connect-timeout=5000
+
+# Actuator
+management.endpoints.web.exposure.include=health,info
+```
+
+**File Structure:**
+
+```
+src/main/resources/
+├── templates/
+│   ├── index.html          # List employees
+│   ├── create.html         # Create form
+│   └── edit.html           # Edit form
+└── static/
+    ├── css/
+    │   └── style.css       # Custom styling
+    └── js/
+        └── app.js          # Client-side JavaScript
+```
+
+**EmployeesClient Implementation Example:**
+
+```java
+@Service
+public class EmployeesClient {
+    
+    private final RestTemplate restTemplate;
+    private final EmployeesProperties properties;
+    
+    public List<Employee> getAllEmployees() {
+        return restTemplate.getForObject(
+            properties.getApiUrl() + "/employees",
+            List.class
+        );
+    }
+    
+    public Employee getEmployee(Long id) {
+        return restTemplate.getForObject(
+            properties.getApiUrl() + "/employees/" + id,
+            Employee.class
+        );
+    }
+    
+    public Employee createEmployee(Employee employee) {
+        return restTemplate.postForObject(
+            properties.getApiUrl() + "/employees",
+            employee,
+            Employee.class
+        );
+    }
+    
+    // Update and delete methods...
+}
+```
+
+**Benefits of This Pattern:**
+
+✅ **Separation of Concerns** - Frontend and backend can be developed independently
+✅ **Scalability** - Each service can be scaled separately
+✅ **Technology Flexibility** - Frontend can use different tech stack
+✅ **Multiple Consumers** - Backend API can be used by mobile apps, other services
+✅ **Testing** - Can test frontend against mock API
+✅ **Deployment** - Independent deployment pipelines
+
+**Running employees-frontend:**
+
+```cmd
+cd employees-frontend
+mvn spring-boot:run
+
+# Access at http://localhost:8081
+```
+
+**Running Both Services Together:**
+
+```cmd
+# Terminal 1: Start backend
+cd employees-backend
+mvn spring-boot:run
+
+# Terminal 2: Start frontend
+cd employees-frontend
+mvn spring-boot:run
+
+# Access frontend at http://localhost:8081
+```
+
+### employees-standalone-form
+
+**Directory:** `employees-standalone-form/`
+
+A monolithic Spring Boot application combining UI, business logic, and database in a single deployable unit. This is suitable for prototypes, small applications, or when separation of concerns is not yet necessary.
+
+**Technologies:**
+- Spring Boot 3.5.8
+- Spring Web (MVC)
+- Spring Data JPA (database access)
+- Spring Validation
+- Thymeleaf (server-side templating)
+- PostgreSQL (database)
+- Liquibase (database migrations)
+- Lombok (code generation)
+
+**Key Features:**
+
+1. **Embedded Database Layer**
+   - JPA Entity: `Employee`
+   - Repository: `EmployeesRepository`
+   - Direct database access (no external API calls)
+
+2. **Service Layer**
+   - `EmployeesService` - Business logic
+   - Transaction management
+   - Data validation
+
+3. **Web UI with Forms**
+   - Server-side form rendering
+   - Direct form submission to backend
+   - No external API calls
+
+4. **Thymeleaf Templates with Forms**
+   - `index.html` - Employee list with inline edit/delete
+   - `create.html` - Create employee form
+   - Form binding with Spring
+
+5. **Database Integration**
+   - Liquibase migrations
+   - Automatic database initialization
+   - Schema versioning
+
+6. **Exception Handling**
+   - `EmployeeNotFoundException`
+   - Form validation errors
+   - User-friendly error messages
+
+**Database Schema:**
+
+```sql
+CREATE TABLE employees (
+    id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE,
+    department VARCHAR(255),
+    salary DECIMAL(10, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Configuration (application.properties):**
+
+```properties
+spring.application.name=employees-standalone
+server.port=8080
+
+# Database
+spring.datasource.url=jdbc:postgresql://localhost:5432/employees_standalone
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.hibernate.ddl-auto=validate
+
+# Liquibase
+spring.liquibase.enabled=true
+spring.liquibase.change-log=classpath:db/changelog/db.changelog-master.xml
+
+# Thymeleaf
+spring.thymeleaf.cache=false
+spring.thymeleaf.enabled=true
+```
+
+**Form Binding Example (Thymeleaf):**
+
+```html
+<!-- create.html -->
+<form th:action="@{/employees}" method="post" th:object="${employee}">
+    <input type="text" th:field="*{name}" required>
+    <input type="email" th:field="*{email}" required>
+    <input type="text" th:field="*{department}">
+    <button type="submit">Create Employee</button>
+</form>
+```
+
+**Controller Example:**
+
+```java
+@Controller
+@RequestMapping("/employees")
+public class EmployeesController {
+    
+    @GetMapping
+    public String list(Model model) {
+        model.addAttribute("employees", service.getAllEmployees());
+        return "index";
+    }
+    
+    @PostMapping
+    public String create(@ModelAttribute("employee") Employee employee) {
+        service.createEmployee(employee);
+        return "redirect:/employees";
+    }
+    
+    // Edit and delete methods...
+}
+```
+
+**Benefits of This Pattern:**
+
+✅ **Simple Deployment** - Single JAR file
+✅ **Quick Development** - Monolithic structure for rapid prototyping
+✅ **Direct Database Access** - No network latency
+✅ **Lower Complexity** - Fewer moving parts
+✅ **Easier Debugging** - Everything in one process
+❌ **Limited Scalability** - Can't scale frontend/backend independently
+❌ **Technology Lock-in** - Must use compatible technologies
+
+**Running employees-standalone-form:**
+
+```cmd
+cd employees-standalone-form
+mvn spring-boot:run
+
+# Access at http://localhost:8080
+```
+
+### Deployment Patterns
+
+**Pattern 1: Microservices (Backend + Frontend)**
+
+```
+┌─────────────────────────────────────────────┐
+│ Client (Browser)                            │
+└─────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────┐
+│ employees-frontend (Port 8081)              │
+│ Thymeleaf UI + RestTemplate                 │
+└─────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────┐
+│ employees-backend (Port 8080)               │
+│ REST API + JPA + PostgreSQL                 │
+└─────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- Independent scaling
+- Different deployment schedules
+- Multiple clients (web, mobile, etc.)
+- Technology flexibility
+
+**Deployment:**
+```cmd
+# Backend (data center)
+cd employees-backend && mvn spring-boot:run
+
+# Frontend (web tier)
+cd employees-frontend && mvn spring-boot:run
+```
+
+**Pattern 2: Monolithic (Standalone)**
+
+```
+┌─────────────────────────────────────────────┐
+│ Client (Browser)                            │
+└─────────────────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────────┐
+│ employees-standalone-form (Port 8080)       │
+│ Thymeleaf UI + JPA + PostgreSQL             │
+└─────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- Simple deployment
+- Fewer moving parts
+- Quick development
+
+**Deployment:**
+```cmd
+cd employees-standalone-form && mvn spring-boot:run
+```
+
+### Database Setup
+
+All three applications use PostgreSQL. Create databases before running:
+
+```sql
+-- Create databases
+CREATE DATABASE employees;
+CREATE DATABASE employees_standalone;
+
+-- Create user (if needed)
+CREATE USER postgres WITH PASSWORD 'postgres';
+GRANT ALL PRIVILEGES ON DATABASE employees TO postgres;
+GRANT ALL PRIVILEGES ON DATABASE employees_standalone TO postgres;
+```
+
+**Or using psql command line:**
+
+```bash
+psql -U postgres
+```
+
+Then:
+
+```sql
+CREATE DATABASE employees;
+CREATE DATABASE employees_standalone;
+```
+
+Liquibase will automatically create tables and run migrations on application startup.
+
+### Running All Three Applications
+
+**Terminal 1: Start Backend**
+
+```cmd
+cd employees-backend
+mvn spring-boot:run
+```
+
+**Terminal 2: Start Frontend**
+
+```cmd
+cd employees-frontend
+mvn spring-boot:run
+```
+
+**Terminal 3: Start Standalone (optional)**
+
+```cmd
+cd employees-standalone-form
+mvn spring-boot:run
+```
+
+**Access Points:**
+- employees-backend API: http://localhost:8080/api/employees
+- employees-frontend UI: http://localhost:8081
+- employees-standalone UI: http://localhost:8080
+
+### Learning Outcomes
+
+These three projects demonstrate:
+
+1. **REST API Design** - employees-backend
+2. **HTTP Client Integration** - employees-frontend
+3. **Separation of Concerns** - Backend/Frontend pattern
+4. **Monolithic Architecture** - Standalone pattern
+5. **Database Migration** - Liquibase in all projects
+6. **Spring MVC & Thymeleaf** - Web UI development
+7. **Error Handling** - Custom exceptions and handlers
+8. **Configuration Management** - Properties and environment variables
+9. **JPA & Spring Data** - Object-relational mapping
+10. **Production-Ready Code** - Validation, logging, testing
+
+### Troubleshooting
+
+**Issue: Port already in use**
+
+```cmd
+# Windows: Find and kill process on port 8080
+netstat -ano | findstr :8080
+taskkill /PID <PID> /F
+
+# Linux/Mac: Find and kill process on port 8080
+lsof -i :8080
+kill -9 <PID>
+```
+
+**Issue: Database connection refused**
+
+```
+Error: Could not get a connection
+```
+
+**Solution:**
+- Ensure PostgreSQL is running
+- Verify database exists
+- Check application.properties credentials
+- Verify database URL: `jdbc:postgresql://localhost:5432/employees`
+
+**Issue: Liquibase migration fails**
+
+```
+Error: Migration V1__initial_schema.sql failed
+```
+
+**Solution:**
+- Check `db/changelog/` directory exists
+- Verify Liquibase XML is valid
+- Check database permissions
+- Review logs for specific error
+
+**Issue: Frontend can't connect to backend**
+
+```
+java.net.ConnectException: Connection refused
+```
+
+**Solution:**
+- Ensure backend is running on correct port (8080)
+- Check `employees.api.url` in frontend properties
+- Verify firewall allows localhost connections
+- Check backend startup logs for errors
 
 ## Running the Examples
 
