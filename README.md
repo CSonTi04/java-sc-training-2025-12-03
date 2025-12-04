@@ -19,6 +19,7 @@ This repository contains comprehensive examples and demonstrations of Java's cry
   - [9. Certificates](#9-certificates)
   - [10. Certificate Chains](#10-certificate-chains)
   - [11. JAR Signing](#11-jar-signing)
+  - [12. HTTPS/TLS Certificates](#12-httpstls-certificates)
 - [Running the Examples](#running-the-examples)
 - [Additional Reading](#additional-reading)
 - [Best Practices](#best-practices)
@@ -57,6 +58,13 @@ signed-jar/
 ├── pom.xml
 └── src/main/java/training/
     └── HelloWorld.java              # Simple class for JAR signing demo
+
+hello-boot-https/
+├── pom.xml
+├── src/main/java/training/helloboothttps/
+│   └── HelloBootHttpsApplication.java  # Spring Boot HTTPS demo
+└── src/main/resources/
+    └── application.properties       # HTTPS/TLS configuration
 ```
 
 ## Topics Covered
@@ -1062,6 +1070,814 @@ The JAR will be automatically signed during the build.
 - [JAR Hell and ClassLoader Issues](https://blog.oio.de/2014/01/31/java-jar-hell/)
 - [Common JAR Signing Mistakes](https://tersesystems.com/blog/2018/09/08/jar-signing/)
 - [Certificate Pinning](https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning)
+
+### 12. HTTPS/TLS Certificates
+
+**Directory:** `hello-boot-https/`
+
+Demonstrates how to configure HTTPS/TLS in a Spring Boot application using self-signed certificates and how to manage certificate replacement without server restart.
+
+**Key Concepts:**
+- TLS/SSL certificate generation for web servers
+- HTTPS configuration in Spring Boot
+- Self-signed vs CA-signed certificates
+- Certificate trust management
+- Hot-reloading certificates without restart
+
+#### What is HTTPS/TLS?
+
+HTTPS (HTTP Secure) uses TLS (Transport Layer Security) to encrypt communication between a client (browser) and server. This provides:
+
+- **Encryption**: Data is encrypted in transit, preventing eavesdropping
+- **Authentication**: Server identity is verified through certificates
+- **Integrity**: Data cannot be modified without detection
+
+**How TLS Works:**
+```
+Client → [Hello] → Server
+Client ← [Certificate + Server Hello] ← Server
+Client → [Verify Certificate]
+Client → [Encrypted Key Exchange] → Server
+Client ↔ [Encrypted Communication] ↔ Server
+```
+
+#### Why Do We Need HTTPS Certificates?
+
+**Security Benefits:**
+- ✅ **Prevents Man-in-the-Middle attacks** - Encrypted communication
+- ✅ **Verifies server identity** - Client knows who they're talking to
+- ✅ **Data integrity** - Detects tampering
+- ✅ **Trust** - Browsers show security indicators (padlock icon)
+- ✅ **SEO ranking** - Google favors HTTPS sites
+- ✅ **Compliance** - Required by PCI-DSS, GDPR, and other regulations
+
+**What Happens Without HTTPS?**
+- ❌ Passwords transmitted in plaintext
+- ❌ Session cookies can be stolen
+- ❌ Data can be intercepted and read
+- ❌ Browser warnings ("Not Secure")
+- ❌ Some browser features disabled (geolocation, camera, etc.)
+
+#### Certificate Types
+
+**1. Self-Signed Certificates**
+- Created and signed by the same entity (no trusted CA)
+- **Pros:** Free, instant, full control
+- **Cons:** Browser warnings, no trust chain, manual trust required
+- **Use Cases:** Development, testing, internal applications
+
+**2. CA-Signed Certificates**
+- Signed by a trusted Certificate Authority
+- **Pros:** Browser trusted, no warnings, professional appearance
+- **Cons:** Costs money (or effort for free CAs), validation required
+- **Use Cases:** Production websites, public-facing applications
+
+#### Generating Self-Signed Certificates for HTTPS
+
+**Method 1: Interactive (with prompts)**
+
+```cmd
+keytool -genkeypair -alias demo -keyalg RSA -keysize 2048 ^
+    -storetype PKCS12 -keystore demo.p12 -validity 3650
+```
+
+**You will be prompted for:**
+```
+Enter keystore password: [enter password]
+Re-enter new password: [enter password]
+What is your first and last name?
+  [Unknown]:  localhost
+What is the name of your organizational unit?
+  [Unknown]:  Development
+What is the name of your organization?
+  [Unknown]:  Training
+What is the name of your City or Locality?
+  [Unknown]:  Budapest
+What is the name of your State or Province?
+  [Unknown]:  Budapest
+What is the two-letter country code for this unit?
+  [Unknown]:  HU
+Is CN=localhost, OU=Development, O=Training, L=Budapest, ST=Budapest, C=HU correct?
+  [no]:  yes
+```
+
+**Parameters Explained:**
+- `-genkeypair` - Generate a public/private key pair with certificate
+- `-alias demo` - Alias to identify this certificate in the keystore
+- `-keyalg RSA` - Use RSA algorithm
+- `-keysize 2048` - 2048-bit RSA key (minimum recommended for HTTPS)
+- `-storetype PKCS12` - Modern keystore format (recommended over JKS)
+- `-keystore demo.p12` - Output keystore file name
+- `-validity 3650` - Certificate valid for 3650 days (~10 years)
+
+**Method 2: Non-Interactive (automated/scripted)**
+
+```cmd
+keytool -genkeypair -alias demo2 -keyalg RSA -keysize 2048 ^
+    -storetype PKCS12 -keystore demo2.p12 -validity 3650 ^
+    -dname "CN=localhost, OU=Development, O=Training, L=Budapest, ST=Budapest, C=HU" ^
+    -storepass storepass
+```
+
+**Additional Parameters:**
+- `-dname "CN=..."` - Distinguished Name (non-interactive)
+  - **CN** (Common Name): Hostname of your server (e.g., `localhost`, `www.example.com`)
+  - **OU** (Organizational Unit): Department (e.g., `Development`, `IT`)
+  - **O** (Organization): Company name
+  - **L** (Locality): City
+  - **ST** (State): State/Province
+  - **C** (Country): Two-letter country code
+- `-storepass storepass` - Keystore password (non-interactive)
+
+⚠️ **Important:** The **CN (Common Name)** must match the hostname used to access the server:
+- For local development: `CN=localhost`
+- For production: `CN=www.example.com` or `CN=*.example.com` (wildcard)
+
+**Method 3: With SAN (Subject Alternative Names) for multiple domains**
+
+```cmd
+keytool -genkeypair -alias demo3 -keyalg RSA -keysize 2048 ^
+    -storetype PKCS12 -keystore demo3.p12 -validity 3650 ^
+    -dname "CN=localhost, OU=Development, O=Training, C=HU" ^
+    -storepass storepass ^
+    -ext "SAN=dns:localhost,dns:127.0.0.1,dns:demo.local,ip:127.0.0.1"
+```
+
+This allows the certificate to be valid for multiple hostnames/IPs.
+
+**Method 4: Using mkcert (Recommended for Local Development)**
+
+[mkcert](https://mkcert.org/) is a simple tool for making locally-trusted development certificates. It automatically creates and installs a local CA in your system trust store, so browsers trust your development certificates without warnings.
+
+**Why mkcert?**
+- ✅ **Zero configuration** - Works immediately, no browser warnings
+- ✅ **Automatic trust** - Installs local CA in system trust store
+- ✅ **Multi-platform** - Works on Windows, macOS, Linux
+- ✅ **Simple workflow** - One command to generate trusted certificates
+- ✅ **Development focused** - Perfect for localhost and local domains
+- ⚠️ **Local only** - Not for production use (by design)
+
+**Installation on Windows (via winget):**
+
+```cmd
+winget install mkcert
+```
+
+**Alternative Installation Methods:**
+
+```cmd
+# Via Chocolatey
+choco install mkcert
+
+# Via Scoop
+scoop bucket add extras
+scoop install mkcert
+
+# Manual download
+# Download from https://github.com/FiloSottile/mkcert/releases
+```
+
+**Setup and Usage:**
+
+**1. Install local CA (one-time setup)**
+
+```cmd
+mkcert -install
+```
+
+This creates a local Certificate Authority and adds it to your system trust store. Now all certificates generated by mkcert will be trusted by your browsers and system.
+
+**Output:**
+```
+Created a new local CA at "C:\Users\YourName\AppData\Local\mkcert"
+The local CA is now installed in the system trust store! ⚡️
+```
+
+**2. Generate certificate for localhost**
+
+```cmd
+mkcert localhost 127.0.0.1 ::1
+```
+
+This creates two files:
+- `localhost+2.pem` - Certificate (public key)
+- `localhost+2-key.pem` - Private key
+
+**3. Convert to PKCS12 for Java/Spring Boot**
+
+```cmd
+# Create PKCS12 keystore from PEM files
+openssl pkcs12 -export -out localhost.p12 ^
+    -inkey localhost+2-key.pem ^
+    -in localhost+2.pem ^
+    -name localhost ^
+    -passout pass:changeit
+```
+
+If OpenSSL is not installed:
+```cmd
+# Install OpenSSL via winget
+winget install OpenSSL.Light
+```
+
+**4. Use in Spring Boot application.properties**
+
+```properties
+server.port=8443
+server.ssl.enabled=true
+server.ssl.key-store=classpath:localhost.p12
+server.ssl.key-store-password=changeit
+server.ssl.key-store-type=PKCS12
+server.ssl.key-alias=localhost
+```
+
+**5. Access without browser warnings! 🎉**
+
+```
+https://localhost:8443
+```
+
+No more "Your connection is not private" warnings - the certificate is fully trusted!
+
+**Advanced mkcert Usage:**
+
+```cmd
+# Generate certificate for custom domains
+mkcert myapp.local "*.myapp.local" myapp.test
+
+# Generate certificate with specific output names
+mkcert -cert-file myapp.crt -key-file myapp.key myapp.local
+
+# Show CA location
+mkcert -CAROOT
+
+# Uninstall local CA (when done with development)
+mkcert -uninstall
+```
+
+**mkcert vs keytool:**
+
+| Feature              | mkcert               | keytool                   |
+|----------------------|----------------------|---------------------------|
+| **Trust**            | Automatic (local CA) | Manual (browser warnings) |
+| **Setup**            | One command install  | Multi-step configuration  |
+| **Browser warnings** | None ✅               | Yes ⚠️                    |
+| **Production use**   | No (local only)      | Yes                       |
+| **Cross-platform**   | Yes                  | Yes                       |
+| **Best for**         | Local development    | Production/testing        |
+
+**Important Security Notes:**
+
+⚠️ **mkcert is for development only!**
+- The local CA private key is stored on your machine
+- Anyone with access to the CA key can create trusted certificates
+- Never use mkcert certificates in production
+- Never share your mkcert CA root key
+
+**Real-World Development Workflow:**
+
+```cmd
+# One-time setup (per machine)
+winget install mkcert
+mkcert -install
+
+# Per project
+cd hello-boot-https
+mkcert localhost 127.0.0.1
+openssl pkcs12 -export -out localhost.p12 ^
+    -inkey localhost+2-key.pem ^
+    -in localhost+2.pem ^
+    -name localhost ^
+    -passout pass:changeit
+
+# Move to resources
+move localhost.p12 src\main\resources\
+
+# Update application.properties
+# server.ssl.key-store=classpath:localhost.p12
+# server.ssl.key-store-password=changeit
+
+# Run - no browser warnings!
+mvn spring-boot:run
+```
+
+**Benefits for Development Teams:**
+
+- ✅ New developers get started faster (no certificate trust setup)
+- ✅ Consistent HTTPS experience across team
+- ✅ Test HTTPS-only features (Service Workers, WebCrypto, etc.)
+- ✅ Realistic development environment matching production
+- ✅ No security warnings cluttering development
+
+**Learn More:**
+
+- Official website: [https://mkcert.org/](https://mkcert.org/)
+- GitHub repository: [https://github.com/FiloSottile/mkcert](https://github.com/FiloSottile/mkcert)
+- How it works: [https://github.com/FiloSottile/mkcert#how-it-works](https://github.com/FiloSottile/mkcert#how-it-works)
+
+#### Configuring Spring Boot for HTTPS
+
+**1. Generate Certificate**
+
+```cmd
+cd hello-boot-https
+keytool -genkeypair -alias demo -keyalg RSA -keysize 2048 ^
+    -storetype PKCS12 -keystore demo.p12 -validity 3650 ^
+    -dname "CN=localhost, OU=Training, O=Training, C=HU" ^
+    -storepass changeit
+```
+
+**2. Configure application.properties**
+
+```properties
+# HTTPS Configuration
+server.port=8443
+server.ssl.enabled=true
+server.ssl.key-store=classpath:demo.p12
+server.ssl.key-store-password=changeit
+server.ssl.key-store-type=PKCS12
+server.ssl.key-alias=demo
+
+# Optional: Require HTTPS
+# server.ssl.enabled=true
+```
+
+**3. Run Spring Boot Application**
+
+```cmd
+cd hello-boot-https
+mvn spring-boot:run
+```
+
+**4. Access via Browser**
+
+```
+https://localhost:8443
+```
+
+You'll see a browser warning because it's self-signed. Click "Advanced" → "Proceed to localhost".
+
+#### What If HTTPS Certificate Is Not Signed?
+
+When using a self-signed certificate, browsers will show security warnings:
+
+**Chrome/Edge:**
+```
+Your connection is not private
+NET::ERR_CERT_AUTHORITY_INVALID
+```
+
+**Firefox:**
+```
+Warning: Potential Security Risk Ahead
+```
+
+**Why?** Browsers don't trust self-signed certificates because there's no trusted CA vouching for the certificate's authenticity.
+
+**Solutions:**
+
+**Option 1: Accept the Warning (Development Only)**
+- Click "Advanced" → "Proceed to localhost (unsafe)"
+- ⚠️ **Never do this for unknown websites!**
+- ✅ Acceptable for `localhost` during development
+
+**Option 2: Add Certificate to Windows Trusted Root Store**
+
+This makes Windows (and all browsers) trust your self-signed certificate.
+
+```cmd
+# Export certificate from keystore
+keytool -exportcert -alias demo -keystore demo.p12 ^
+    -storepass changeit -file demo.cer
+
+# Import to Windows Trusted Root Certification Authorities
+certutil -addstore -user Root demo.cer
+```
+
+**Verify in Windows:**
+1. Win + R → `certmgr.msc`
+2. Trusted Root Certification Authorities → Certificates
+3. Find your certificate (CN=localhost)
+
+**Remove certificate when done:**
+```cmd
+certutil -delstore -user Root demo
+```
+
+**Option 3: Use Let's Encrypt (Free CA-Signed Certificates)**
+
+[Let's Encrypt](https://letsencrypt.org/) provides free, automated, trusted SSL/TLS certificates.
+
+**Requirements:**
+- Domain name (cannot use `localhost`)
+- Publicly accessible server (port 80 or 443)
+- ACME client (e.g., Certbot)
+
+**Basic Process:**
+```bash
+# Install Certbot
+sudo apt-get install certbot
+
+# Obtain certificate (standalone mode)
+sudo certbot certonly --standalone -d example.com
+
+# Certificates saved to:
+# /etc/letsencrypt/live/example.com/fullchain.pem
+# /etc/letsencrypt/live/example.com/privkey.pem
+
+# Convert to PKCS12 for Java
+openssl pkcs12 -export -in fullchain.pem -inkey privkey.pem \
+    -out keystore.p12 -name demo -passout pass:changeit
+```
+
+**Auto-Renewal (Let's Encrypt certs expire every 90 days):**
+```bash
+sudo certbot renew
+```
+
+**Spring Boot Configuration:**
+```properties
+server.ssl.key-store=/etc/letsencrypt/live/example.com/keystore.p12
+server.ssl.key-store-password=changeit
+```
+
+**Alternatives to Let's Encrypt:**
+- [ZeroSSL](https://zerossl.com/) - Free certificates like Let's Encrypt
+- [Cloudflare](https://www.cloudflare.com/) - Free SSL with CDN
+- Commercial CAs: DigiCert, GlobalSign, Sectigo (paid, extended validation)
+
+#### Certificate Replacement Without Restart
+
+One of the powerful features demonstrated is **hot-swapping certificates without restarting the server**.
+
+**Why Is This Important?**
+
+- **Zero Downtime**: No service interruption during certificate renewal
+- **Automated Renewal**: Can integrate with Let's Encrypt auto-renewal
+- **Security Updates**: Quickly respond to compromised certificates
+- **Testing**: Switch between test and production certificates
+
+**How It Works:**
+
+The `demo2.p12` keystore demonstrates that Spring Boot can be configured to reload SSL context dynamically.
+
+**Step-by-Step Hot-Swap:**
+
+**1. Server is running with `demo.p12`**
+
+```properties
+server.ssl.key-store=classpath:demo.p12
+```
+
+**2. Generate new certificate (`demo2.p12`)**
+
+```cmd
+keytool -genkeypair -alias demo2 -keyalg RSA -keysize 2048 ^
+    -storetype PKCS12 -keystore demo2.p12 -validity 3650 ^
+    -dname "CN=localhost, OU=Training2, O=Training, C=HU" ^
+    -storepass storepass
+```
+
+**3. Update configuration (Spring Cloud Config or hot-reload)**
+
+```properties
+server.ssl.key-store=classpath:demo2.p12
+server.ssl.key-store-password=storepass
+server.ssl.key-alias=demo2
+```
+
+**4. Reload SSL context programmatically**
+
+**Approach A: Spring Actuator Refresh**
+```java
+@RestController
+public class CertificateRefreshController {
+    
+    @Autowired
+    private WebServerApplicationContext webServerContext;
+    
+    @PostMapping("/admin/refresh-ssl")
+    public String refreshSsl() {
+        // Trigger SSL context reload
+        // Implementation depends on embedded server (Tomcat/Jetty/Undertow)
+        return "SSL certificate reloaded";
+    }
+}
+```
+
+**Approach B: Using Spring Cloud Config**
+```properties
+# application.properties
+spring.cloud.config.enabled=true
+management.endpoints.web.exposure.include=refresh
+
+# After changing certificate
+POST http://localhost:8443/actuator/refresh
+```
+
+**Approach C: File Watching (Production-Grade)**
+```java
+@Configuration
+public class SslReloadConfiguration {
+    
+    @Value("${server.ssl.key-store}")
+    private String keystorePath;
+    
+    @PostConstruct
+    public void watchKeystore() throws IOException {
+        WatchService watchService = FileSystems.getDefault().newWatchService();
+        Path path = Paths.get(keystorePath).getParent();
+        path.register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
+        
+        new Thread(() -> {
+            while (true) {
+                WatchKey key = watchService.take();
+                // Reload SSL context when keystore file changes
+                reloadSslContext();
+                key.reset();
+            }
+        }).start();
+    }
+    
+    private void reloadSslContext() {
+        // Reload implementation
+    }
+}
+```
+
+**5. Verify new certificate**
+
+```cmd
+# Check which certificate is being used
+openssl s_client -connect localhost:8443 -showcerts
+
+# Output will show the new certificate details
+# Verify: OU=Training2 (from demo2.p12)
+```
+
+**Benefits of Certificate Hot-Reload:**
+
+✅ **No Downtime**: Server keeps serving requests during cert update
+✅ **Automated Renewal**: Integrate with Let's Encrypt auto-renewal scripts
+✅ **Blue-Green Deployments**: Test new certificates before full rollout
+✅ **Quick Response**: Fast mitigation of compromised certificates
+✅ **Maintenance Windows**: No need to schedule downtime for cert renewal
+
+**Real-World Scenario:**
+
+```bash
+# Cron job runs daily
+0 0 * * * certbot renew --post-hook "curl -X POST http://localhost:8080/admin/refresh-ssl"
+```
+
+When Let's Encrypt auto-renews your certificate (every 60 days), the post-hook triggers SSL reload without restart.
+
+#### Verifying HTTPS Certificates
+
+**Using Browser Developer Tools:**
+
+1. Open https://localhost:8443
+2. Click the padlock icon → "Certificate"
+3. Verify:
+   - Issued to: CN=localhost
+   - Issued by: CN=localhost (self-signed)
+   - Valid from/to dates
+   - Public key: RSA 2048 bits
+
+**Using OpenSSL:**
+
+```cmd
+# View certificate details
+openssl s_client -connect localhost:8443 -showcerts
+
+# Check specific details
+openssl s_client -connect localhost:8443 | openssl x509 -noout -text
+
+# Verify certificate dates
+openssl s_client -connect localhost:8443 | openssl x509 -noout -dates
+
+# Check certificate chain
+openssl s_client -connect localhost:8443 -showcerts | openssl storeutl -noout -text -certs /dev/stdin
+```
+
+**Using Keytool:**
+
+```cmd
+# List keystore contents
+keytool -list -v -keystore demo.p12 -storepass changeit
+
+# Check certificate validity
+keytool -list -keystore demo.p12 -storepass changeit
+```
+
+**Using curl:**
+
+```cmd
+# Accept self-signed (insecure, testing only)
+curl -k https://localhost:8443
+
+# Verify with specific CA certificate
+curl --cacert demo.cer https://localhost:8443
+
+# Show certificate details
+curl -v https://localhost:8443
+```
+
+#### Production Best Practices
+
+**Certificate Management:**
+- ✅ Use certificates from trusted CAs (Let's Encrypt, DigiCert, etc.)
+- ✅ Use 2048-bit RSA minimum (4096-bit for high security)
+- ✅ Consider ECC certificates (256-bit) for better performance
+- ✅ Set appropriate validity periods (Let's Encrypt: 90 days, commercial: 1-2 years)
+- ✅ Implement automated renewal (critical for Let's Encrypt)
+- ✅ Monitor certificate expiration dates
+- ✅ Use Subject Alternative Names (SAN) for multiple domains
+
+**TLS Configuration:**
+- ✅ Use TLS 1.2 minimum (TLS 1.3 recommended)
+- ✅ Disable weak cipher suites
+- ✅ Enable Perfect Forward Secrecy (PFS)
+- ✅ Implement HSTS (HTTP Strict Transport Security)
+- ✅ Use strong Diffie-Hellman parameters
+
+**Spring Boot Production Configuration:**
+
+```properties
+# HTTPS Configuration
+server.port=8443
+server.ssl.enabled=true
+server.ssl.key-store=file:/etc/ssl/certs/keystore.p12
+server.ssl.key-store-password=${SSL_KEYSTORE_PASSWORD}
+server.ssl.key-store-type=PKCS12
+server.ssl.key-alias=production
+
+# TLS Protocol
+server.ssl.protocol=TLS
+server.ssl.enabled-protocols=TLSv1.2,TLSv1.3
+
+# Cipher Suites (strong ciphers only)
+server.ssl.ciphers=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+
+# Client Certificate Authentication (optional)
+server.ssl.client-auth=need
+server.ssl.trust-store=file:/etc/ssl/certs/truststore.p12
+server.ssl.trust-store-password=${SSL_TRUSTSTORE_PASSWORD}
+
+# Redirect HTTP to HTTPS
+server.http.port=8080
+```
+
+**Redirect HTTP to HTTPS (Spring Boot):**
+
+```java
+@Configuration
+public class HttpsRedirectConfiguration {
+    
+    @Bean
+    public ServletWebServerFactory servletContainer() {
+        TomcatServletWebServerFactory tomcat = new TomcatServletWebServerFactory() {
+            @Override
+            protected void postProcessContext(Context context) {
+                SecurityConstraint securityConstraint = new SecurityConstraint();
+                securityConstraint.setUserConstraint("CONFIDENTIAL");
+                SecurityCollection collection = new SecurityCollection();
+                collection.addPattern("/*");
+                securityConstraint.addCollection(collection);
+                context.addConstraint(securityConstraint);
+            }
+        };
+        tomcat.addAdditionalTomcatConnectors(redirectConnector());
+        return tomcat;
+    }
+    
+    private Connector redirectConnector() {
+        Connector connector = new Connector("org.apache.coyote.http11.Http11NioProtocol");
+        connector.setScheme("http");
+        connector.setPort(8080);
+        connector.setSecure(false);
+        connector.setRedirectPort(8443);
+        return connector;
+    }
+}
+```
+
+**Environment Variables (Security):**
+```cmd
+# Windows
+set SSL_KEYSTORE_PASSWORD=your-secure-password
+
+# Linux/Mac
+export SSL_KEYSTORE_PASSWORD=your-secure-password
+```
+
+**Docker Deployment:**
+```dockerfile
+# Dockerfile
+FROM openjdk:21-jdk-slim
+COPY target/app.jar /app.jar
+COPY certs/keystore.p12 /etc/ssl/certs/keystore.p12
+ENTRYPOINT ["java", "-jar", "/app.jar"]
+
+# docker-compose.yml
+services:
+  app:
+    build: .
+    ports:
+      - "8443:8443"
+    environment:
+      - SSL_KEYSTORE_PASSWORD=${SSL_KEYSTORE_PASSWORD}
+    volumes:
+      - ./certs:/etc/ssl/certs:ro
+```
+
+**Testing HTTPS Configuration:**
+
+```bash
+# Test with SSL Labs (for public sites)
+https://www.ssllabs.com/ssltest/
+
+# Test with testssl.sh
+./testssl.sh https://localhost:8443
+
+# Test with nmap
+nmap --script ssl-enum-ciphers -p 8443 localhost
+```
+
+#### Common Issues and Solutions
+
+**Issue 1: Certificate hostname mismatch**
+```
+Error: Certificate for <localhost> doesn't match any of the subject alternative names
+```
+**Solution:** Ensure CN matches the hostname, or use SAN extension:
+```cmd
+keytool -genkeypair ... -ext "SAN=dns:localhost,ip:127.0.0.1"
+```
+
+**Issue 2: Certificate expired**
+```
+Error: certificate has expired
+```
+**Solution:** Generate new certificate with longer validity or implement auto-renewal
+
+**Issue 3: Keystore password incorrect**
+```
+Error: Keystore was tampered with, or password was incorrect
+```
+**Solution:** Verify password in application.properties matches keytool password
+
+**Issue 4: Port already in use**
+```
+Error: Address already in use: bind
+```
+**Solution:** Change port or kill process using port 8443:
+```cmd
+netstat -ano | findstr :8443
+taskkill /PID <PID> /F
+```
+
+**Issue 5: Browser still shows old certificate after hot-swap**
+```
+Browser cache showing old certificate
+```
+**Solution:** 
+- Clear browser SSL cache
+- Use incognito/private mode
+- Restart browser
+- Check server actually reloaded certificate
+
+#### Additional Reading - HTTPS/TLS
+
+**Official Documentation:**
+- [Spring Boot SSL Configuration](https://docs.spring.io/spring-boot/docs/current/reference/html/application-properties.html#application-properties.server.server.ssl)
+- [Oracle JSSE Reference Guide](https://docs.oracle.com/en/java/javase/21/security/java-secure-socket-extension-jsse-reference-guide.html)
+- [keytool Documentation](https://docs.oracle.com/en/java/javase/21/docs/specs/man/keytool.html)
+
+**Standards:**
+- [RFC 8446 - TLS 1.3](https://tools.ietf.org/html/rfc8446)
+- [RFC 5246 - TLS 1.2](https://tools.ietf.org/html/rfc5246)
+- [RFC 6125 - Domain Name Validation](https://tools.ietf.org/html/rfc6125)
+- [RFC 6797 - HTTP Strict Transport Security (HSTS)](https://tools.ietf.org/html/rfc6797)
+
+**Tools and Services:**
+- [Let's Encrypt](https://letsencrypt.org/) - Free SSL/TLS certificates
+- [Certbot](https://certbot.eff.org/) - Automatic certificate management
+- [mkcert](https://mkcert.org/) - **Recommended for local development** - Zero-config local CA, creates trusted certificates instantly (`winget install mkcert`)
+- [SSL Labs Server Test](https://www.ssllabs.com/ssltest/) - Test your HTTPS configuration
+- [testssl.sh](https://testssl.sh/) - Command-line TLS/SSL testing
+
+**Best Practices:**
+- [Mozilla SSL Configuration Generator](https://ssl-config.mozilla.org/)
+- [OWASP Transport Layer Protection](https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Protection_Cheat_Sheet.html)
+- [Qualys SSL/TLS Deployment Best Practices](https://github.com/ssllabs/research/wiki/SSL-and-TLS-Deployment-Best-Practices)
+
+**Certificate Authorities:**
+- [Let's Encrypt](https://letsencrypt.org/) - Free, automated
+- [ZeroSSL](https://zerossl.com/) - Free alternative
+- [DigiCert](https://www.digicert.com/) - Commercial, EV certificates
+- [GlobalSign](https://www.globalsign.com/) - Commercial
+- [Sectigo (formerly Comodo)](https://sectigo.com/) - Commercial
 
 ## Running the Examples
 
