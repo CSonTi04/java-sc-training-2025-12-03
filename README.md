@@ -1941,6 +1941,253 @@ Browser cache showing old certificate
 
 This section explains the OAuth 2.0 Authorization Code Grant flow with Keycloak, a comprehensive identity and access management solution.
 
+### What is Keycloak?
+
+Keycloak is an open-source Identity and Access Management (IAM) solution developed by Red Hat. It provides enterprise-grade security features for modern applications and services with minimal coding required.
+
+**Key Features:**
+- 🔐 **Single Sign-On (SSO)** - Users authenticate once and access multiple applications
+- 🌐 **Social Login** - Integration with Google, Facebook, GitHub, LinkedIn, etc.
+- 👥 **User Federation** - Connect to existing LDAP or Active Directory
+- 🛡️ **Standard Protocols** - OpenID Connect, OAuth 2.0, SAML 2.0
+- 🔑 **Multi-Factor Authentication** - OTP, WebAuthn, SMS
+- 📊 **Admin Console** - Web-based UI for managing users, roles, and clients
+- 🎨 **Customizable Themes** - Branded login pages and emails
+- 🔌 **Extensible** - Custom authentication flows, event listeners, providers
+
+### Keycloak Setup and Configuration
+
+#### Installation Methods
+
+**1. Standalone Server (Development):**
+```bash
+# Download Keycloak
+wget https://github.com/keycloak/keycloak/releases/download/23.0.0/keycloak-23.0.0.zip
+unzip keycloak-23.0.0.zip
+cd keycloak-23.0.0
+
+# Start in development mode
+bin/kc.sh start-dev
+
+# Access admin console at http://localhost:8080
+# Default credentials: admin/admin
+```
+
+**2. Docker (Quick Start):**
+```bash
+docker run -p 8080:8080 \
+  -e KEYCLOAK_ADMIN=admin \
+  -e KEYCLOAK_ADMIN_PASSWORD=admin \
+  quay.io/keycloak/keycloak:23.0.0 \
+  start-dev
+```
+
+**3. Docker Compose (Recommended for Development):**
+```yaml
+version: '3.8'
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.0
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+    command: start-dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+  
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+```
+
+#### Keycloak Configuration Steps
+
+**Step 1: Create a Realm**
+
+A realm is a space where you manage users, applications, roles, and groups. Think of it as a tenant in a multi-tenant system.
+
+```
+Admin Console → Master (dropdown) → Create Realm
+- Name: training-realm
+- Enabled: ON
+```
+
+**Step 2: Create a Client**
+
+A client represents your application that will use Keycloak for authentication.
+
+```
+Realm Settings → Clients → Create Client
+- Client ID: employees-app
+- Client Protocol: openid-connect
+- Client Authentication: ON (for confidential clients)
+- Valid Redirect URIs: http://localhost:8081/*, http://localhost:8081/login/oauth2/code/keycloak
+- Web Origins: http://localhost:8081
+- Backchannel Logout URL: http://localhost:8081/logout
+```
+
+**Client Settings:**
+- **Access Type**: confidential (server-side apps) or public (SPAs, mobile)
+- **Standard Flow Enabled**: ON (Authorization Code Flow)
+- **Direct Access Grants Enabled**: OFF (disable Resource Owner Password Credentials)
+- **Service Accounts Enabled**: ON (for client credentials flow)
+- **Authorization Enabled**: ON (for fine-grained permissions)
+
+**Step 3: Create Roles**
+
+Roles define what users can do in your application.
+
+```
+Realm Settings → Roles → Create Role
+- Role Name: USER
+- Description: Standard user role
+
+Create another role:
+- Role Name: ADMIN
+- Description: Administrator role
+```
+
+**Step 4: Create Users**
+
+```
+Users → Add User
+- Username: john.doe
+- Email: john.doe@example.com
+- First Name: John
+- Last Name: Doe
+- Email Verified: ON
+- Enabled: ON
+
+Set Password:
+Users → john.doe → Credentials → Set Password
+- Password: password123
+- Temporary: OFF
+
+Assign Roles:
+Users → john.doe → Role Mappings
+- Assign Role: USER
+```
+
+**Step 5: Client Scopes and Mappers**
+
+Client scopes define what information is included in tokens.
+
+```
+Client Scopes → Create Client Scope
+- Name: employee-access
+- Protocol: openid-connect
+- Include in Token Scope: ON
+
+Add Mapper (to include custom claims):
+- Mapper Type: User Attribute
+- Name: department
+- User Attribute: department
+- Token Claim Name: department
+- Claim JSON Type: String
+```
+
+**Step 6: Configure Spring Boot Application**
+
+Add dependencies in `pom.xml`:
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-oauth2-client</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+</dependency>
+```
+
+Configure `application.yaml`:
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: employees-app
+            client-secret: ${KEYCLOAK_CLIENT_SECRET}
+            scope: openid, profile, email, roles
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8080/realms/training-realm
+            user-name-attribute: preferred_username
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8080/realms/training-realm
+          jwk-set-uri: http://localhost:8080/realms/training-realm/protocol/openid-connect/certs
+```
+
+### Keycloak Realm Export/Import
+
+**Export Realm Configuration:**
+```bash
+# Export realm to file
+bin/kc.sh export --dir /tmp/keycloak-export --realm training-realm
+
+# Export includes:
+# - Clients
+# - Roles
+# - Users (without passwords by default)
+# - Client scopes
+# - Authentication flows
+```
+
+**Import Realm:**
+```bash
+# Import realm from file
+bin/kc.sh import --file /tmp/keycloak-export/training-realm.json
+```
+
+**Realm JSON Example:**
+```json
+{
+  "realm": "training-realm",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "clients": [
+    {
+      "clientId": "employees-app",
+      "enabled": true,
+      "publicClient": false,
+      "redirectUris": ["http://localhost:8081/*"],
+      "webOrigins": ["http://localhost:8081"]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {"name": "USER"},
+      {"name": "ADMIN"}
+    ]
+  }
+}
+```
+
 ### OAuth 2.0 Authorization Code Grant Flow Diagram
 
 The following diagram illustrates the complete OAuth 2.0 Authorization Code Grant flow (PKCE - Proof Key for Code Exchange):
@@ -2152,6 +2399,494 @@ Microservice → Can trust token (signed by Keycloak) → Process request
 - [PKCE Specification (RFC 7636)](https://tools.ietf.org/html/rfc7636)
 - [OpenID Connect Specification](https://openid.net/specs/openid-connect-core-1_0.html)
 - [Spring Security OAuth2 Guide](https://spring.io/guides/tutorials/spring-boot-oauth2/)
+- [Keycloak Spring Boot Adapter](https://www.keycloak.org/docs/latest/securing_apps/#_spring_boot_adapter)
+- [Baeldung Keycloak Guide](https://www.baeldung.com/spring-boot-keycloak)
+
+### Spring Security Integration Examples
+
+#### Example 1: Resource Server Configuration (Backend API)
+
+**SecurityConfig.java:**
+```java
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(authz -> authz
+                .requestMatchers("/api/public/**").permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/employees/**").hasAnyRole("USER", "ADMIN")
+                .anyRequest().authenticated()
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt
+                    .jwtAuthenticationConverter(jwtAuthenticationConverter())
+                )
+            )
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            )
+            .csrf(csrf -> csrf.disable()); // Stateless API
+        
+        return http.build();
+    }
+
+    @Bean
+    public JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = 
+            new JwtGrantedAuthoritiesConverter();
+        
+        // Convert Keycloak realm_access.roles to Spring Security authorities
+        grantedAuthoritiesConverter.setAuthoritiesClaimName("realm_access.roles");
+        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
+
+        JwtAuthenticationConverter jwtAuthenticationConverter = 
+            new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(
+            grantedAuthoritiesConverter);
+        
+        return jwtAuthenticationConverter;
+    }
+}
+```
+
+**Controller with Method Security:**
+```java
+@RestController
+@RequestMapping("/api/employees")
+public class EmployeeController {
+
+    @Autowired
+    private EmployeeService employeeService;
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    public ResponseEntity<List<EmployeeDto>> getAllEmployees() {
+        return ResponseEntity.ok(employeeService.findAll());
+    }
+
+    @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<EmployeeDto> createEmployee(
+            @Valid @RequestBody CreateEmployeeRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        
+        // Access token claims
+        String username = jwt.getClaimAsString("preferred_username");
+        String email = jwt.getClaimAsString("email");
+        
+        EmployeeDto employee = employeeService.create(request, username);
+        return ResponseEntity.status(HttpStatus.CREATED).body(employee);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN') or @employeeService.isOwner(#id, authentication.name)")
+    public ResponseEntity<EmployeeDto> updateEmployee(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateEmployeeRequest request) {
+        
+        EmployeeDto updated = employeeService.update(id, request);
+        return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> deleteEmployee(@PathVariable Long id) {
+        employeeService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+```
+
+#### Example 2: OAuth2 Client Configuration (Frontend Application)
+
+**SecurityConfig.java:**
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(authz -> authz
+                .requestMatchers("/", "/public/**", "/css/**", "/js/**").permitAll()
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .anyRequest().authenticated()
+            )
+            .oauth2Login(oauth2 -> oauth2
+                .loginPage("/oauth2/authorization/keycloak")
+                .defaultSuccessUrl("/employees", true)
+                .failureUrl("/login?error=true")
+            )
+            .logout(logout -> logout
+                .logoutSuccessUrl("/")
+                .invalidateHttpSession(true)
+                .clearAuthentication(true)
+                .deleteCookies("JSESSIONID")
+            )
+            .sessionManagement(session -> session
+                .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+                .maximumSessions(1)
+                .expiredUrl("/login?expired=true")
+            );
+        
+        return http.build();
+    }
+
+    @Bean
+    public OAuth2AuthorizedClientManager authorizedClientManager(
+            ClientRegistrationRepository clientRegistrationRepository,
+            OAuth2AuthorizedClientRepository authorizedClientRepository) {
+        
+        OAuth2AuthorizedClientProvider authorizedClientProvider =
+            OAuth2AuthorizedClientProviderBuilder.builder()
+                .authorizationCode()
+                .refreshToken()
+                .build();
+
+        DefaultOAuth2AuthorizedClientManager authorizedClientManager =
+            new DefaultOAuth2AuthorizedClientManager(
+                clientRegistrationRepository,
+                authorizedClientRepository);
+        
+        authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
+        
+        return authorizedClientManager;
+    }
+}
+```
+
+**RestClient with OAuth2 Token Propagation:**
+```java
+@Service
+public class EmployeeClient {
+
+    private final WebClient webClient;
+
+    public EmployeeClient(OAuth2AuthorizedClientManager authorizedClientManager) {
+        ServletOAuth2AuthorizedClientExchangeFilterFunction oauth2 =
+            new ServletOAuth2AuthorizedClientExchangeFilterFunction(
+                authorizedClientManager);
+        
+        oauth2.setDefaultClientRegistrationId("keycloak");
+
+        this.webClient = WebClient.builder()
+            .baseUrl("http://localhost:8080")
+            .apply(oauth2.oauth2Configuration())
+            .build();
+    }
+
+    public List<EmployeeDto> getAllEmployees() {
+        return webClient.get()
+            .uri("/api/employees")
+            .retrieve()
+            .bodyToMono(new ParameterizedTypeReference<List<EmployeeDto>>() {})
+            .block();
+    }
+
+    public EmployeeDto createEmployee(CreateEmployeeRequest request) {
+        return webClient.post()
+            .uri("/api/employees")
+            .bodyValue(request)
+            .retrieve()
+            .bodyToMono(EmployeeDto.class)
+            .block();
+    }
+}
+```
+
+**Controller with OAuth2 User Info:**
+```java
+@Controller
+public class EmployeeViewController {
+
+    @Autowired
+    private EmployeeClient employeeClient;
+
+    @GetMapping("/employees")
+    public String listEmployees(
+            Model model,
+            @AuthenticationPrincipal OAuth2User principal) {
+        
+        // Access user information
+        String name = principal.getAttribute("name");
+        String email = principal.getAttribute("email");
+        List<String> roles = principal.getAttribute("realm_access.roles");
+        
+        model.addAttribute("username", name);
+        model.addAttribute("employees", employeeClient.getAllEmployees());
+        model.addAttribute("isAdmin", roles != null && roles.contains("ADMIN"));
+        
+        return "employees/list";
+    }
+}
+```
+
+#### Example 3: Custom JWT Token Validation
+
+**CustomJwtValidator.java:**
+```java
+@Component
+public class CustomJwtValidator implements OAuth2TokenValidator<Jwt> {
+
+    @Override
+    public OAuth2TokenValidatorResult validate(Jwt jwt) {
+        List<OAuth2Error> errors = new ArrayList<>();
+
+        // Validate token expiration with clock skew
+        Instant expiresAt = jwt.getExpiresAt();
+        if (expiresAt != null && Instant.now().isAfter(expiresAt.plusSeconds(60))) {
+            errors.add(new OAuth2Error("invalid_token", "Token has expired", null));
+        }
+
+        // Validate audience
+        List<String> audience = jwt.getAudience();
+        if (audience == null || !audience.contains("employees-app")) {
+            errors.add(new OAuth2Error("invalid_token", 
+                "Token does not contain required audience", null));
+        }
+
+        // Validate issuer
+        String issuer = jwt.getIssuer().toString();
+        if (!issuer.equals("http://localhost:8080/realms/training-realm")) {
+            errors.add(new OAuth2Error("invalid_token", 
+                "Token issuer is invalid", null));
+        }
+
+        // Custom business rule: check email verification
+        Boolean emailVerified = jwt.getClaim("email_verified");
+        if (emailVerified == null || !emailVerified) {
+            errors.add(new OAuth2Error("invalid_token", 
+                "Email must be verified", null));
+        }
+
+        return errors.isEmpty() 
+            ? OAuth2TokenValidatorResult.success() 
+            : OAuth2TokenValidatorResult.failure(errors);
+    }
+}
+
+@Configuration
+public class JwtConfig {
+
+    @Bean
+    public JwtDecoder jwtDecoder(
+            CustomJwtValidator customJwtValidator,
+            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") 
+            String jwkSetUri) {
+        
+        NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+        
+        OAuth2TokenValidator<Jwt> validators = new DelegatingOAuth2TokenValidator<>(
+            JwtValidators.createDefault(),
+            customJwtValidator
+        );
+        
+        jwtDecoder.setJwtValidator(validators);
+        
+        return jwtDecoder;
+    }
+}
+```
+
+#### Example 4: Testing Security with Spring Security Test
+
+**EmployeeControllerTest.java:**
+```java
+@WebMvcTest(EmployeeController.class)
+@Import(SecurityConfig.class)
+class EmployeeControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private EmployeeService employeeService;
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void testGetAllEmployees_WithUserRole_ShouldSucceed() throws Exception {
+        List<EmployeeDto> employees = Arrays.asList(
+            new EmployeeDto(1L, "John Doe", "john@example.com")
+        );
+        
+        when(employeeService.findAll()).thenReturn(employees);
+
+        mockMvc.perform(get("/api/employees"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].name").value("John Doe"));
+    }
+
+    @Test
+    @WithMockUser(roles = "USER")
+    void testCreateEmployee_WithUserRole_ShouldFail() throws Exception {
+        CreateEmployeeRequest request = new CreateEmployeeRequest("Jane Doe", 
+            "jane@example.com");
+
+        mockMvc.perform(post("/api/employees")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void testCreateEmployee_WithAdminRole_ShouldSucceed() throws Exception {
+        CreateEmployeeRequest request = new CreateEmployeeRequest("Jane Doe", 
+            "jane@example.com");
+        EmployeeDto created = new EmployeeDto(2L, "Jane Doe", "jane@example.com");
+        
+        when(employeeService.create(any(), any())).thenReturn(created);
+
+        mockMvc.perform(post("/api/employees")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Jane Doe"));
+    }
+
+    @Test
+    void testGetAllEmployees_Unauthenticated_ShouldFail() throws Exception {
+        mockMvc.perform(get("/api/employees"))
+            .andExpect(status().isUnauthorized());
+    }
+}
+```
+
+**Integration Test with Real JWT:**
+```java
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+class EmployeeControllerIntegrationTest {
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @Test
+    void testWithRealJwtToken() {
+        // Obtain token from Keycloak (using Resource Owner Password Credentials)
+        String token = getKeycloakToken("john.doe", "password123");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        
+        HttpEntity<String> entity = new HttpEntity<>(headers);
+
+        ResponseEntity<EmployeeDto[]> response = restTemplate.exchange(
+            "/api/employees",
+            HttpMethod.GET,
+            entity,
+            EmployeeDto[].class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotEmpty();
+    }
+
+    private String getKeycloakToken(String username, String password) {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("grant_type", "password");
+        formData.add("client_id", "employees-app");
+        formData.add("client_secret", "your-client-secret");
+        formData.add("username", username);
+        formData.add("password", password);
+
+        RestTemplate keycloakClient = new RestTemplate();
+        String tokenUrl = "http://localhost:8080/realms/training-realm/protocol/openid-connect/token";
+        
+        ResponseEntity<Map> response = keycloakClient.postForEntity(
+            tokenUrl,
+            formData,
+            Map.class
+        );
+
+        return (String) response.getBody().get("access_token");
+    }
+}
+```
+
+### Keycloak Advanced Features
+
+#### Custom Authentication Flow
+
+Keycloak allows customization of authentication flows:
+
+1. **Conditional OTP** - Require MFA only for sensitive operations
+2. **Risk-Based Authentication** - Adjust security based on user behavior
+3. **Custom Authenticators** - Implement custom authentication logic
+
+**Example: Conditional OTP Configuration**
+```
+Authentication → Flows → Browser Flow → Duplicate
+- Add Execution: Conditional OTP
+- Configure: Require OTP for role "ADMIN"
+```
+
+#### Event Listeners and Audit Logging
+
+```java
+@Provider
+public class CustomEventListenerProvider implements EventListenerProvider {
+
+    @Override
+    public void onEvent(Event event) {
+        if (event.getType() == EventType.LOGIN) {
+            log.info("User {} logged in from {}", 
+                event.getUserId(), event.getIpAddress());
+        } else if (event.getType() == EventType.LOGIN_ERROR) {
+            log.warn("Failed login attempt for {} from {}", 
+                event.getDetails().get("username"), event.getIpAddress());
+        }
+    }
+
+    @Override
+    public void onEvent(AdminEvent adminEvent, boolean includeRepresentation) {
+        log.info("Admin action: {} on resource {}", 
+            adminEvent.getOperationType(), adminEvent.getResourcePath());
+    }
+}
+```
+
+#### User Storage SPI (Custom User Federation)
+
+```java
+public class CustomUserStorageProvider implements UserStorageProvider, 
+        UserLookupProvider, CredentialInputValidator {
+
+    @Override
+    public UserModel getUserByUsername(String username, RealmModel realm) {
+        // Query custom database or external system
+        User externalUser = externalUserService.findByUsername(username);
+        
+        if (externalUser != null) {
+            return new CustomUserAdapter(session, realm, model, externalUser);
+        }
+        
+        return null;
+    }
+
+    @Override
+    public boolean isValid(RealmModel realm, UserModel user, 
+            CredentialInput credentialInput) {
+        
+        if (!(credentialInput instanceof UserCredentialModel)) {
+            return false;
+        }
+        
+        UserCredentialModel cred = (UserCredentialModel) credentialInput;
+        
+        // Validate against external system
+        return externalUserService.validatePassword(
+            user.getUsername(), 
+            cred.getValue()
+        );
+    }
+}
+```
 
 ## Employee Management Projects
 
@@ -2862,6 +3597,280 @@ mvn exec:java -Dexec.mainClass="jca.VerifySignMain"
 ### Video Courses
 - [Coursera - Cryptography I](https://www.coursera.org/learn/crypto) by Stanford University
 - [Udemy - Complete Cryptography Course](https://www.udemy.com/topic/cryptography/)
+- [Pluralsight - Java Security Fundamentals](https://www.pluralsight.com/)
+- [LinkedIn Learning - Cryptography and Network Security](https://www.linkedin.com/learning/)
+
+### Modern Security Topics
+
+#### JWT (JSON Web Tokens)
+**Reading Materials:**
+- [JWT Introduction](https://jwt.io/introduction)
+- [RFC 7519 - JSON Web Token](https://tools.ietf.org/html/rfc7519)
+- [Auth0 JWT Handbook](https://auth0.com/resources/ebooks/jwt-handbook)
+- [OWASP JWT Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)
+
+**Key Concepts:**
+- Stateless authentication mechanism
+- Composed of Header, Payload, and Signature
+- Used extensively in OAuth 2.0 and OpenID Connect
+- Should be signed (JWS) and optionally encrypted (JWE)
+- Vulnerable to algorithm confusion attacks if not validated properly
+
+**Java Libraries:**
+- [jjwt (Java JWT)](https://github.com/jwtk/jjwt) - Popular JWT library for Java
+- [Nimbus JOSE + JWT](https://connect2id.com/products/nimbus-jose-jwt)
+- [Auth0 Java JWT](https://github.com/auth0/java-jwt)
+
+**Example Use Case:**
+```java
+// Creating a JWT with jjwt library
+String jwt = Jwts.builder()
+    .setSubject("user123")
+    .setIssuedAt(new Date())
+    .setExpiration(new Date(System.currentTimeMillis() + 3600000))
+    .claim("roles", Arrays.asList("USER", "ADMIN"))
+    .signWith(SignatureAlgorithm.HS256, secretKey)
+    .compact();
+```
+
+#### Web Security (CSRF, XSS, CORS)
+
+**Cross-Site Request Forgery (CSRF):**
+- [OWASP CSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [Spring Security CSRF Protection](https://docs.spring.io/spring-security/reference/features/exploits/csrf.html)
+- Use synchronizer tokens or double-submit cookies
+- SameSite cookie attribute helps prevent CSRF
+
+**Cross-Site Scripting (XSS):**
+- [OWASP XSS Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+- [DOMPurify](https://github.com/cure53/DOMPurify) - DOM-only XSS sanitizer
+- Always sanitize user input
+- Use Content Security Policy (CSP) headers
+- Encode output based on context (HTML, JavaScript, URL)
+
+**Cross-Origin Resource Sharing (CORS):**
+- [CORS Specification](https://www.w3.org/TR/cors/)
+- [Spring CORS Configuration](https://spring.io/guides/gs/rest-service-cors/)
+- Configure allowed origins, methods, and headers
+- Avoid using wildcards (*) in production
+
+#### Password Storage and Authentication
+
+**Modern Password Hashing:**
+- [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+- **Argon2** - Winner of Password Hashing Competition (recommended)
+- **bcrypt** - Widely used, adaptive cost factor
+- **scrypt** - Memory-hard function
+- **PBKDF2** - NIST recommended, available in Java
+
+**Java Libraries:**
+- [Spring Security Crypto](https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html)
+- [Bouncy Castle - SCrypt, BCrypt](https://www.bouncycastle.org/)
+- [Password4j](https://github.com/Password4j/password4j) - Modern password hashing
+
+**Example:**
+```java
+// Using bcrypt with Spring Security
+BCryptPasswordEncoder encoder = new BCryptPasswordEncoder(12);
+String hashedPassword = encoder.encode("plainPassword");
+boolean matches = encoder.matches("plainPassword", hashedPassword);
+```
+
+#### Multi-Factor Authentication (MFA)
+
+**Resources:**
+- [OWASP MFA Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html)
+- [RFC 6238 - TOTP](https://tools.ietf.org/html/rfc6238) - Time-based One-Time Password
+- [RFC 4226 - HOTP](https://tools.ietf.org/html/rfc4226) - HMAC-based One-Time Password
+- [WebAuthn](https://webauthn.io/) - Modern passwordless authentication
+
+**Java Libraries:**
+- [GoogleAuth](https://github.com/wstrange/GoogleAuth) - Google Authenticator compatible TOTP
+- [TOTP-Spring-Boot-Starter](https://github.com/samdjstevens/totp-spring-boot-starter)
+
+#### API Security
+
+**Resources:**
+- [OWASP API Security Top 10](https://owasp.org/www-project-api-security/)
+- [API Security Best Practices](https://github.com/shieldfy/API-Security-Checklist)
+- Rate limiting and throttling
+- API key management
+- OAuth 2.0 scopes and permissions
+- API versioning strategies
+
+**Key Practices:**
+- Use HTTPS everywhere
+- Implement proper authentication (OAuth 2.0, API keys)
+- Validate and sanitize all inputs
+- Implement rate limiting
+- Use API gateways for centralized security
+- Log and monitor API usage
+
+### Cloud Security and Key Management
+
+**AWS Security:**
+- [AWS Key Management Service (KMS)](https://aws.amazon.com/kms/)
+- [AWS Secrets Manager](https://aws.amazon.com/secrets-manager/)
+- [AWS Certificate Manager](https://aws.amazon.com/certificate-manager/)
+- [AWS CloudHSM](https://aws.amazon.com/cloudhsm/)
+
+**Azure Security:**
+- [Azure Key Vault](https://azure.microsoft.com/en-us/services/key-vault/)
+- [Azure Managed HSM](https://docs.microsoft.com/en-us/azure/key-vault/managed-hsm/)
+- [Azure Confidential Computing](https://azure.microsoft.com/en-us/solutions/confidential-compute/)
+
+**Google Cloud Security:**
+- [Google Cloud KMS](https://cloud.google.com/security-key-management)
+- [Google Secret Manager](https://cloud.google.com/secret-manager)
+- [Google Cloud HSM](https://cloud.google.com/kms/docs/hsm)
+
+**HashiCorp Vault:**
+- [Vault Documentation](https://www.vaultproject.io/docs)
+- Dynamic secrets generation
+- Encryption as a Service
+- Certificate management
+- Multi-cloud support
+
+### Security Testing and Tools
+
+**Static Analysis:**
+- [SpotBugs](https://spotbugs.github.io/) - Java bug detector
+- [Find Security Bugs](https://find-sec-bugs.github.io/) - SpotBugs plugin for security audits
+- [SonarQube](https://www.sonarqube.org/) - Code quality and security
+- [Checkmarx](https://www.checkmarx.com/) - Static Application Security Testing (SAST)
+
+**Dependency Scanning:**
+- [OWASP Dependency-Check](https://owasp.org/www-project-dependency-check/)
+- [Snyk](https://snyk.io/) - Vulnerability scanning for dependencies
+- [GitHub Dependabot](https://github.com/dependabot) - Automated dependency updates
+- [JFrog Xray](https://jfrog.com/xray/) - Universal artifact analysis
+
+**Dynamic Analysis:**
+- [OWASP ZAP](https://www.zaproxy.org/) - Web application security scanner
+- [Burp Suite](https://portswigger.net/burp) - Web vulnerability scanner
+- [Acunetix](https://www.acunetix.com/) - Automated web app security testing
+
+**Penetration Testing:**
+- [Metasploit Framework](https://www.metasploit.com/)
+- [Kali Linux](https://www.kali.org/) - Penetration testing distribution
+- [OWASP Testing Guide](https://owasp.org/www-project-web-security-testing-guide/)
+
+### Security Frameworks and Standards
+
+**Compliance Frameworks:**
+- **PCI DSS** - Payment Card Industry Data Security Standard
+- **HIPAA** - Health Insurance Portability and Accountability Act
+- **GDPR** - General Data Protection Regulation
+- **SOC 2** - Service Organization Control 2
+- **ISO 27001** - Information Security Management
+- **NIST Cybersecurity Framework**
+
+**Resources:**
+- [PCI Security Standards](https://www.pcisecuritystandards.org/)
+- [NIST Cybersecurity Framework](https://www.nist.gov/cyberframework)
+- [CIS Controls](https://www.cisecurity.org/controls/)
+- [SANS Security Resources](https://www.sans.org/security-resources/)
+
+### Modern Cryptographic Trends
+
+**Post-Quantum Cryptography:**
+- [NIST Post-Quantum Cryptography](https://csrc.nist.gov/projects/post-quantum-cryptography)
+- Preparing for quantum computing threats
+- CRYSTALS-Kyber (key encapsulation)
+- CRYSTALS-Dilithium (digital signatures)
+- [Bouncy Castle Post-Quantum Support](https://www.bouncycastle.org/java.html)
+
+**Zero-Knowledge Proofs:**
+- [zkSNARKs](https://z.cash/technology/zksnarks/) - Zero-Knowledge Succinct Non-Interactive Arguments of Knowledge
+- Privacy-preserving authentication
+- Blockchain applications
+
+**Homomorphic Encryption:**
+- Computing on encrypted data without decryption
+- [Microsoft SEAL](https://github.com/microsoft/SEAL)
+- Privacy-preserving machine learning
+
+### Practical Security Examples
+
+**Example 1: Secure Configuration Management**
+```java
+// Using environment variables for sensitive data
+String dbPassword = System.getenv("DB_PASSWORD");
+String apiKey = System.getenv("API_KEY");
+
+// Using Spring Boot externalized configuration
+@ConfigurationProperties(prefix = "app.security")
+public class SecurityProperties {
+    private String jwtSecret;
+    private int jwtExpiration;
+    // getters and setters
+}
+```
+
+**Example 2: Secure REST API Endpoint**
+```java
+@RestController
+@RequestMapping("/api/employees")
+public class EmployeeController {
+    
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping
+    public ResponseEntity<Employee> createEmployee(
+            @Valid @RequestBody EmployeeRequest request) {
+        // Input validation via @Valid
+        // Authorization via @PreAuthorize
+        // Business logic
+    }
+    
+    @GetMapping("/{id}")
+    @RateLimiter(name = "employee-api")
+    public ResponseEntity<Employee> getEmployee(@PathVariable Long id) {
+        // Rate limiting to prevent abuse
+        // Return employee data
+    }
+}
+```
+
+**Example 3: Secure Password Reset Flow**
+```java
+// 1. Generate secure token
+String resetToken = UUID.randomUUID().toString();
+String hashedToken = passwordEncoder.encode(resetToken);
+
+// 2. Store with expiration
+PasswordResetToken token = new PasswordResetToken();
+token.setToken(hashedToken);
+token.setExpiryDate(LocalDateTime.now().plusHours(24));
+token.setUser(user);
+tokenRepository.save(token);
+
+// 3. Send via secure channel (email with HTTPS link)
+emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
+
+// 4. Validate token on reset
+if (token.isExpired() || !passwordEncoder.matches(providedToken, token.getToken())) {
+    throw new InvalidTokenException();
+}
+```
+
+### Community and Forums
+
+**Security Communities:**
+- [OWASP Community](https://owasp.org/community/)
+- [Security StackExchange](https://security.stackexchange.com/)
+- [Reddit r/netsec](https://www.reddit.com/r/netsec/)
+- [Reddit r/crypto](https://www.reddit.com/r/crypto/)
+
+**Blogs and News:**
+- [Krebs on Security](https://krebsonsecurity.com/)
+- [Schneier on Security](https://www.schneier.com/)
+- [The Hacker News](https://thehackernews.com/)
+- [Threatpost](https://threatpost.com/)
+
+**Podcasts:**
+- [Security Now](https://twit.tv/shows/security-now)
+- [Darknet Diaries](https://darknetdiaries.com/)
+- [Risky Business](https://risky.biz/)
 
 ## Best Practices
 
