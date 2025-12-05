@@ -34,6 +34,8 @@ public class SecurityConfig {
                                         .requestMatchers("/create-employee").hasRole("ADMIN")
                                         .anyRequest().denyAll()
                 )
+                //turn this off and set username to this:
+                //<!-- <script src="http://127.0.0.1:5500/server/hello.js"></script> -->
                 .headers(headers -> headers.contentSecurityPolicy( policy -> policy.policyDirectives("script-src 'self'")))
                 .formLogin(Customizer.withDefaults())
                 .logout(Customizer.withDefaults());
