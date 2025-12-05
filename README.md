@@ -2346,8 +2346,11 @@ The following diagram illustrates the complete OAuth 2.0 Authorization Code Gran
 
 The following projects in this repository demonstrate OAuth 2.0 with Keycloak:
 
-- **employees-backend-oauth2** - REST API protected with OAuth 2.0 tokens
-- **employees-frontend-oatuh2** - Frontend application with OAuth 2.0 integration
+- **employees-backend-oauth2** - REST API protected with OAuth 2.0 tokens (Resource Server)
+- **employees-frontend-oauth2** - Frontend application with OAuth 2.0 integration (OAuth2 Client)
+- **employees-standalone-form-spring-security** - Monolithic app with Spring Security form-based authentication
+
+**Detailed documentation for these projects is available in the [Employee Management Projects](#employee-management-projects) section below.**
 
 ### Common Use Cases
 
@@ -2890,22 +2893,26 @@ public class CustomUserStorageProvider implements UserStorageProvider,
 
 ## Employee Management Projects
 
-This section covers three Spring Boot applications that demonstrate real-world web application architecture, from REST APIs to full-stack web applications with different deployment patterns.
+This section covers **six** Spring Boot applications that demonstrate real-world web application architecture, from REST APIs to full-stack web applications with different deployment patterns and security configurations.
 
 ### Architecture Overview
 
-These three projects showcase different architectural patterns for building employee management systems:
+These six projects showcase different architectural patterns and security approaches for building employee management systems:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    Architecture Comparison                       │
 └─────────────────────────────────────────────────────────────────┘
 
+BASIC APPLICATIONS (No OAuth2)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 employees-backend (Microservice Pattern)
 ├── REST API only (no UI)
 ├── Stateless backend
 ├── Database: PostgreSQL
 ├── API Endpoints: /api/employees/*
+├── Security: None (demo purposes)
 └── Port: 8080
 
 employees-frontend (Separation of Concerns)
@@ -2913,6 +2920,7 @@ employees-frontend (Separation of Concerns)
 ├── HTTP client for backend API
 ├── Calls employees-backend via REST
 ├── Database: None (stateless)
+├── Security: None (demo purposes)
 └── Port: 8081
 
 employees-standalone-form (Monolithic Pattern)
@@ -2920,21 +2928,55 @@ employees-standalone-form (Monolithic Pattern)
 ├── Single deployable JAR
 ├── Embedded forms with direct database access
 ├── Database: PostgreSQL
+├── Security: None (demo purposes)
+└── Port: 8080
+
+OAUTH2 / OPENID CONNECT APPLICATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+employees-backend-oauth2 (Resource Server)
+├── REST API with OAuth 2.0 JWT validation
+├── Validates access tokens from Keycloak
+├── Role-based access control
+├── Database: PostgreSQL
+├── Security: OAuth 2.0 Resource Server
+└── Port: 8080
+
+employees-frontend-oauth2 (OAuth2 Client)
+├── Web UI with OAuth 2.0 login
+├── Integrates with Keycloak for authentication
+├── Calls employees-backend-oauth2 with tokens
+├── Database: None (stateless)
+├── Security: OAuth 2.0 Client (Authorization Code Flow)
+└── Port: 8080
+
+SPRING SECURITY FORM-BASED AUTHENTICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+employees-standalone-form-spring-security (Form Login + RBAC)
+├── Full stack with Spring Security
+├── Form-based authentication
+├── Role-based authorization (USER, ADMIN)
+├── Password hashing with Argon2
+├── Database: PostgreSQL (users + employees)
+├── Security: Spring Security with form login
 └── Port: 8080
 ```
 
-**Key Differences:**
+**Comprehensive Comparison:**
 
-| Aspect           | employees-backend               | employees-frontend     | employees-standalone-form             |
-|------------------|---------------------------------|------------------------|---------------------------------------|
-| **Architecture** | Microservice (API-only)         | Frontend tier          | Monolithic                            |
-| **UI**           | None                            | Thymeleaf              | Thymeleaf                             |
-| **Database**     | PostgreSQL                      | None                   | PostgreSQL                            |
-| **Dependencies** | Spring Data JPA, Liquibase      | Spring Web, Thymeleaf  | Spring Data JPA, Thymeleaf, Liquibase |
-| **Deployment**   | Standalone service              | Standalone service     | Single JAR                            |
-| **Port**         | 8080                            | 8081                   | 8080                                  |
-| **Use Case**     | Mobile apps, multiple frontends | Web UI for backend API | Prototype, small apps                 |
-| **Scalability**  | High (separation of concerns)   | Medium (stateless)     | Low (monolithic)                      |
+| Aspect             | employees-backend   | employees-frontend | employees-standalone-form | employees-backend-oauth2  | employees-frontend-oauth2 | employees-standalone-form-spring-security |
+|--------------------|---------------------|--------------------|---------------------------|---------------------------|---------------------------|-------------------------------------------|
+| **Architecture**   | Microservice        | Frontend tier      | Monolithic                | Microservice              | Frontend tier             | Monolithic                                |
+| **UI**             | None                | Thymeleaf          | Thymeleaf                 | None                      | Thymeleaf                 | Thymeleaf                                 |
+| **Database**       | PostgreSQL          | None               | PostgreSQL                | PostgreSQL                | None                      | PostgreSQL                                |
+| **Security**       | None                | None               | None                      | OAuth 2.0 Resource Server | OAuth 2.0 Client          | Spring Security Form Login                |
+| **Authentication** | N/A                 | N/A                | N/A                       | JWT tokens from Keycloak  | OAuth2 Authorization Code | Username/Password (Argon2)                |
+| **Authorization**  | N/A                 | N/A                | N/A                       | Role-based (JWT claims)   | Delegated to Keycloak     | Role-based (@Secured)                     |
+| **Port**           | 8080                | 8081               | 8080                      | 8080                      | 8080                      | 8080                                      |
+| **Use Case**       | API for mobile apps | Web UI for backend | Prototype, small apps     | Secure microservice API   | Enterprise web app        | Traditional web app with auth             |
+| **Scalability**    | High                | Medium             | Low                       | High                      | Medium                    | Low                                       |
+| **Complexity**     | Low                 | Low                | Low                       | Medium                    | Medium                    | Medium                                    |
 
 ### employees-backend
 
@@ -3388,9 +3430,551 @@ cd employees-frontend && mvn spring-boot:run
 cd employees-standalone-form && mvn spring-boot:run
 ```
 
+---
+
+### employees-backend-oauth2
+
+**Directory:** `employees-backend-oauth2/`
+
+A secured RESTful API backend that validates OAuth 2.0 JWT access tokens issued by Keycloak. This is a **Resource Server** implementation following OAuth 2.0 specifications.
+
+**Technologies:**
+- Spring Boot 3.5.8
+- Spring Security OAuth2 Resource Server
+- Spring Data JPA
+- PostgreSQL
+- Liquibase
+- Lombok
+
+**Key Features:**
+
+1. **OAuth 2.0 Resource Server**
+   - Validates JWT access tokens from Keycloak
+   - Extracts user information from token claims
+   - Verifies token signature using Keycloak's public key
+   - Checks token expiration and issuer
+
+2. **Role-Based Access Control (RBAC)**
+   - Roles extracted from JWT `realm_access.roles` claim
+   - Method-level security with `@PreAuthorize`
+   - Fine-grained authorization for endpoints
+
+3. **REST API Endpoints**
+   - `GET /api/employees` - List all employees (requires `USER` or `ADMIN` role)
+   - `GET /api/employees/{id}` - Get employee by ID (requires authentication)
+   - `POST /api/employees` - Create new employee (requires `ADMIN` role)
+   - `PUT /api/employees/{id}` - Update employee (requires `ADMIN` role)
+   - `DELETE /api/employees/{id}` - Delete employee (requires `ADMIN` role)
+
+4. **Security Configuration**
+   ```java
+   @Configuration
+   @EnableWebSecurity
+   @EnableMethodSecurity
+   public class SecurityConfig {
+       @Bean
+       public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+           http
+               .authorizeHttpRequests(authz -> authz
+                   .requestMatchers("/api/public/**").permitAll()
+                   .requestMatchers("/api/employees/**").authenticated()
+                   .anyRequest().denyAll()
+               )
+               .oauth2ResourceServer(oauth2 -> oauth2.jwt())
+               .sessionManagement(session -> session
+                   .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+               )
+               .csrf(csrf -> csrf.disable());
+           return http.build();
+       }
+   }
+   ```
+
+**Configuration (application.yaml):**
+
+```yaml
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8090/realms/EmployeesRealm
+          jwk-set-uri: http://localhost:8090/realms/EmployeesRealm/protocol/openid-connect/certs
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/employees
+    username: employees
+    password: employees
+
+server:
+  port: 8080
+```
+
+**JWT Token Structure:**
+
+```json
+{
+  "exp": 1701878400,
+  "iat": 1701878100,
+  "jti": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "iss": "http://localhost:8090/realms/EmployeesRealm",
+  "aud": "account",
+  "sub": "12345678-1234-1234-1234-123456789012",
+  "typ": "Bearer",
+  "azp": "employees-frontend",
+  "realm_access": {
+    "roles": ["USER", "ADMIN"]
+  },
+  "email": "john.doe@example.com",
+  "name": "John Doe",
+  "preferred_username": "john.doe"
+}
+```
+
+**Example API Usage with Token:**
+
+```bash
+# Obtain token from Keycloak (using password grant for testing)
+TOKEN=$(curl -X POST http://localhost:8090/realms/EmployeesRealm/protocol/openid-connect/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=password" \
+  -d "client_id=employees-frontend" \
+  -d "username=john.doe" \
+  -d "password=password123" \
+  | jq -r '.access_token')
+
+# Call API with token
+curl -X GET http://localhost:8080/api/employees \
+  -H "Authorization: Bearer $TOKEN"
+
+# Create employee (requires ADMIN role)
+curl -X POST http://localhost:8080/api/employees \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Jane Doe","email":"jane@example.com"}'
+```
+
+**Running employees-backend-oauth2:**
+
+```cmd
+# Ensure Keycloak is running on port 8090
+cd employees-backend-oauth2
+mvn spring-boot:run
+```
+
+**Security Features:**
+- ✅ Stateless authentication (no session)
+- ✅ JWT signature verification
+- ✅ Token expiration checking
+- ✅ Issuer validation
+- ✅ Role-based authorization
+- ✅ CORS configuration for frontend
+- ✅ Protection against common attacks (XSS, CSRF not needed for stateless API)
+
+---
+
+### employees-frontend-oauth2
+
+**Directory:** `employees-frontend-oauth2/`
+
+A web frontend application that integrates with Keycloak for authentication using **OAuth 2.0 Authorization Code Flow**. This is an **OAuth2 Client** implementation.
+
+**Technologies:**
+- Spring Boot 3.5.8
+- Spring Security OAuth2 Client
+- Thymeleaf (server-side templates)
+- WebClient (for REST calls)
+- OAuth2 Authorization Code Flow with PKCE
+
+**Key Features:**
+
+1. **OAuth 2.0 Client**
+   - Implements Authorization Code Flow
+   - PKCE (Proof Key for Code Exchange) support
+   - Automatic token refresh
+   - Session-based token storage
+
+2. **Keycloak Integration**
+   - Redirects to Keycloak for login
+   - Handles OAuth2 callback
+   - Stores tokens in HTTP session
+   - Single Sign-On (SSO) support
+
+3. **Backend API Integration**
+   - Calls `employees-backend-oauth2` REST API
+   - Propagates access token to backend
+   - Handles token expiration and refresh
+   - Automatic authentication retry
+
+4. **User Interface**
+   - Login page (redirects to Keycloak)
+   - Employee list page
+   - Create employee form (ADMIN only)
+   - User profile display
+   - Logout functionality
+
+**Configuration (application.yaml):**
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: employees-frontend
+            authorization-grant-type: authorization_code
+            scope:
+              - openid
+              - profile
+              - email
+        provider:
+          keycloak:
+            issuer-uri: http://localhost:8090/realms/EmployeesRealm
+
+server:
+  port: 8080
+```
+
+**Security Configuration:**
+
+```java
+@Configuration
+public class SecurityConfig {
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeHttpRequests(authz -> authz
+                .requestMatchers("/create-employee").authenticated()
+                .anyRequest().permitAll()
+            )
+            .oauth2Login(withDefaults())
+            .logout(withDefaults());
+        return http.build();
+    }
+}
+```
+
+**OAuth2 Flow in This Application:**
+
+1. **User accesses protected page** → Redirected to Keycloak
+2. **User logs in at Keycloak** → Keycloak authenticates user
+3. **Keycloak redirects back** → With authorization code
+4. **Application exchanges code for tokens** → Receives access_token, id_token, refresh_token
+5. **Tokens stored in session** → Secure, HttpOnly cookies
+6. **API calls include access token** → Backend validates token
+7. **Token expires** → Automatically refreshed using refresh_token
+
+**Controller Example:**
+
+```java
+@Controller
+public class EmployeesController {
+    
+    @Autowired
+    private EmployeesClient employeesClient;
+
+    @GetMapping("/employees")
+    public String listEmployees(
+            Model model,
+            @AuthenticationPrincipal OAuth2User principal) {
+        
+        // Get user info from token
+        String name = principal.getAttribute("name");
+        List<String> roles = principal.getAttribute("realm_access.roles");
+        
+        // Call backend API (token automatically included)
+        List<EmployeeDto> employees = employeesClient.getAllEmployees();
+        
+        model.addAttribute("username", name);
+        model.addAttribute("employees", employees);
+        model.addAttribute("isAdmin", roles.contains("ADMIN"));
+        
+        return "employees/list";
+    }
+
+    @PostMapping("/create-employee")
+    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
+    public String createEmployee(@ModelAttribute EmployeeRequest request) {
+        employeesClient.createEmployee(request);
+        return "redirect:/employees";
+    }
+}
+```
+
+**WebClient with OAuth2 Token Propagation:**
+
+```java
+@Service
+public class EmployeesClient {
+    
+    private final WebClient webClient;
+
+    public EmployeesClient(OAuth2AuthorizedClientManager authorizedClientManager) {
+        ServletOAuth2AuthorizedClientExchangeFilterFunction oauth2 =
+            new ServletOAuth2AuthorizedClientExchangeFilterFunction(
+                authorizedClientManager);
+        
+        oauth2.setDefaultClientRegistrationId("keycloak");
+
+        this.webClient = WebClient.builder()
+            .baseUrl("http://localhost:8080")
+            .apply(oauth2.oauth2Configuration())
+            .build();
+    }
+
+    public List<EmployeeDto> getAllEmployees() {
+        return webClient.get()
+            .uri("/api/employees")
+            .retrieve()
+            .bodyToFlux(EmployeeDto.class)
+            .collectList()
+            .block();
+    }
+}
+```
+
+**Running employees-frontend-oauth2:**
+
+```cmd
+# Ensure Keycloak is running on port 8090
+# Ensure employees-backend-oauth2 is running on port 8080
+cd employees-frontend-oauth2
+mvn spring-boot:run
+```
+
+**Access:** http://localhost:8080
+
+**Login Flow:**
+1. Navigate to http://localhost:8080/employees
+2. Redirected to Keycloak login page
+3. Enter credentials (e.g., john.doe / password123)
+4. Redirected back to application
+5. See employee list with user name displayed
+
+**Security Features:**
+- ✅ Authorization Code Flow with PKCE
+- ✅ Secure token storage (server-side session)
+- ✅ Automatic token refresh
+- ✅ CSRF protection enabled
+- ✅ HttpOnly session cookies
+- ✅ State parameter for CSRF prevention
+- ✅ Single Sign-On (SSO) support
+
+---
+
+### employees-standalone-form-spring-security
+
+**Directory:** `employees-standalone-form-spring-security/`
+
+A monolithic application with traditional **Spring Security form-based authentication**. This demonstrates role-based access control without OAuth2, using database-stored user credentials.
+
+**Technologies:**
+- Spring Boot 3.5.8
+- Spring Security (Form Login)
+- Spring Data JPA
+- PostgreSQL
+- Liquibase
+- Thymeleaf
+- Argon2 password hashing
+
+**Key Features:**
+
+1. **Form-Based Authentication**
+   - Traditional username/password login
+   - Login page with CSRF protection
+   - Remember-me functionality
+   - Logout support
+
+2. **Password Security**
+   - Argon2 password hashing (OWASP recommended)
+   - Strong password encoding
+   - Secure password storage in database
+
+3. **Role-Based Authorization**
+   - `USER` role - Can view employees
+   - `ADMIN` role - Can create/edit/delete employees
+   - Method-level security with `@Secured`
+   - URL-based authorization
+
+4. **User Management**
+   - Users stored in database
+   - Roles assigned to users
+   - User details service for authentication
+
+**Database Schema:**
+
+```sql
+-- Users table
+CREATE TABLE users (
+    username VARCHAR(50) PRIMARY KEY,
+    password VARCHAR(100) NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- Authorities (roles) table
+CREATE TABLE authorities (
+    username VARCHAR(50) NOT NULL,
+    authority VARCHAR(50) NOT NULL,
+    CONSTRAINT fk_authorities_users 
+        FOREIGN KEY(username) 
+        REFERENCES users(username),
+    CONSTRAINT authorities_idx 
+        UNIQUE (username, authority)
+);
+
+-- Employees table
+CREATE TABLE employees (
+    id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE
+);
+```
+
+**Security Configuration:**
+
+```java
+@Configuration
+@EnableMethodSecurity(securedEnabled = true)
+public class SecurityConfig {
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests(registry -> registry
+                .requestMatchers("/login").permitAll()
+                .requestMatchers("/", "/employees").hasRole("USER")
+                .requestMatchers("/create-employee").hasRole("ADMIN")
+                .anyRequest().denyAll()
+            )
+            .formLogin(Customizer.withDefaults())
+            .logout(Customizer.withDefaults());
+        return http.build();
+    }
+}
+```
+
+**Configuration (application.yaml):**
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/employees
+    username: employees
+    password: employees
+  jpa:
+    open-in-view: false
+  liquibase:
+    change-log: classpath:db/db-changelog.yaml
+
+server:
+  port: 8080
+```
+
+**Sample Users (Created by Liquibase):**
+
+```sql
+-- User with USER role (password: user123)
+INSERT INTO users (username, password, enabled) 
+VALUES ('user', '{argon2}$argon2id$v=19$m=16384,t=2,p=1$...', true);
+
+INSERT INTO authorities (username, authority) 
+VALUES ('user', 'ROLE_USER');
+
+-- User with ADMIN role (password: admin123)
+INSERT INTO users (username, password, enabled) 
+VALUES ('admin', '{argon2}$argon2id$v=19$m=16384,t=2,p=1$...', true);
+
+INSERT INTO authorities (username, authority) 
+VALUES ('admin', 'ROLE_USER'), ('admin', 'ROLE_ADMIN');
+```
+
+**Controller with Security Annotations:**
+
+```java
+@Controller
+public class EmployeesController {
+
+    @Autowired
+    private EmployeesService employeesService;
+
+    @GetMapping("/employees")
+    @Secured("ROLE_USER")
+    public String listEmployees(Model model, Authentication authentication) {
+        model.addAttribute("employees", employeesService.findAll());
+        model.addAttribute("username", authentication.getName());
+        
+        // Check if user is admin
+        boolean isAdmin = authentication.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        model.addAttribute("isAdmin", isAdmin);
+        
+        return "employees/list";
+    }
+
+    @GetMapping("/create-employee")
+    @Secured("ROLE_ADMIN")
+    public String createEmployeeForm(Model model) {
+        model.addAttribute("employee", new CreateEmployeeCommand());
+        return "employees/create";
+    }
+
+    @PostMapping("/create-employee")
+    @Secured("ROLE_ADMIN")
+    public String createEmployee(@Valid @ModelAttribute CreateEmployeeCommand command) {
+        employeesService.create(command);
+        return "redirect:/employees";
+    }
+}
+```
+
+**Running employees-standalone-form-spring-security:**
+
+```cmd
+# Ensure PostgreSQL is running
+# Database will be created by Liquibase
+cd employees-standalone-form-spring-security
+mvn spring-boot:run
+```
+
+**Access:** http://localhost:8080
+
+**Login Credentials:**
+- **User:** username=`user`, password=`user123` (can view employees)
+- **Admin:** username=`admin`, password=`admin123` (can create/edit/delete)
+
+**Security Features:**
+- ✅ Form-based login (Spring Security default)
+- ✅ Argon2 password hashing (OWASP recommended)
+- ✅ CSRF protection enabled
+- ✅ Session management
+- ✅ Role-based access control (RBAC)
+- ✅ Method-level security (`@Secured`)
+- ✅ URL-based authorization
+- ✅ Logout functionality
+- ✅ Authentication remembered across sessions
+
+**Comparison with OAuth2 Approach:**
+
+| Aspect | Form-Based (This Project) | OAuth2 (employees-frontend-oauth2) |
+|--------|---------------------------|-------------------------------------|
+| **Login** | Local login form | Keycloak login page |
+| **Credentials** | Stored in app database | Managed by Keycloak |
+| **Token** | Session cookie | JWT access token |
+| **SSO** | No | Yes (across apps) |
+| **Scalability** | Limited (session state) | High (stateless tokens) |
+| **Complexity** | Low | Medium |
+| **Use Case** | Small, internal apps | Enterprise, multiple apps |
+
+---
+
 ### Database Setup
 
-All three applications use PostgreSQL. Create databases before running:
+All six applications (except frontend-only ones) use PostgreSQL. Create databases before running:
 
 ```sql
 -- Create databases
@@ -3398,9 +3982,9 @@ CREATE DATABASE employees;
 CREATE DATABASE employees_standalone;
 
 -- Create user (if needed)
-CREATE USER postgres WITH PASSWORD 'postgres';
-GRANT ALL PRIVILEGES ON DATABASE employees TO postgres;
-GRANT ALL PRIVILEGES ON DATABASE employees_standalone TO postgres;
+CREATE USER employees WITH PASSWORD 'employees';
+GRANT ALL PRIVILEGES ON DATABASE employees TO employees;
+GRANT ALL PRIVILEGES ON DATABASE employees_standalone TO employees;
 ```
 
 **Or using psql command line:**
@@ -3418,7 +4002,49 @@ CREATE DATABASE employees_standalone;
 
 Liquibase will automatically create tables and run migrations on application startup.
 
-### Running All Three Applications
+### Running the OAuth2 Applications Together
+
+To see the complete OAuth2 flow with all components:
+
+**1. Start Keycloak (Docker):**
+
+```bash
+docker run -p 8090:8080 \
+  -e KEYCLOAK_ADMIN=admin \
+  -e KEYCLOAK_ADMIN_PASSWORD=admin \
+  quay.io/keycloak/keycloak:23.0.0 \
+  start-dev
+```
+
+Access Keycloak Admin Console: http://localhost:8090 (admin/admin)
+
+**2. Configure Keycloak:**
+- Create realm: `EmployeesRealm`
+- Create client: `employees-frontend` (OAuth2 client)
+- Create roles: `USER`, `ADMIN`
+- Create users with roles
+
+**3. Start Backend Resource Server:**
+
+```cmd
+cd employees-backend-oauth2
+mvn spring-boot:run
+```
+
+**4. Start Frontend OAuth2 Client:**
+
+```cmd
+cd employees-frontend-oauth2
+mvn spring-boot:run
+```
+
+**5. Access Application:**
+- Navigate to http://localhost:8080
+- Click login → Redirected to Keycloak
+- Login with Keycloak user
+- Access employee management features
+
+### Running All Applications
 
 **Terminal 1: Start Backend**
 
@@ -3441,15 +4067,40 @@ cd employees-standalone-form
 mvn spring-boot:run
 ```
 
+**Terminal 4: Start OAuth2 Backend (optional)**
+
+```cmd
+cd employees-backend-oauth2
+mvn spring-boot:run
+```
+
+**Terminal 5: Start OAuth2 Frontend (optional)**
+
+```cmd
+cd employees-frontend-oauth2
+mvn spring-boot:run
+```
+
+**Terminal 6: Start Spring Security Standalone (optional)**
+
+```cmd
+cd employees-standalone-form-spring-security
+mvn spring-boot:run
+```
+
 **Access Points:**
 - employees-backend API: http://localhost:8080/api/employees
 - employees-frontend UI: http://localhost:8081
 - employees-standalone UI: http://localhost:8080
+- employees-backend-oauth2 API: http://localhost:8080/api/employees (requires token)
+- employees-frontend-oauth2 UI: http://localhost:8080
+- employees-standalone-form-spring-security UI: http://localhost:8080 (login with user/admin)
 
 ### Learning Outcomes
 
-These three projects demonstrate:
+These six projects demonstrate:
 
+**Basic Architecture Patterns:**
 1. **REST API Design** - employees-backend
 2. **HTTP Client Integration** - employees-frontend
 3. **Separation of Concerns** - Backend/Frontend pattern
@@ -3460,6 +4111,32 @@ These three projects demonstrate:
 8. **Configuration Management** - Properties and environment variables
 9. **JPA & Spring Data** - Object-relational mapping
 10. **Production-Ready Code** - Validation, logging, testing
+
+**OAuth 2.0 & OpenID Connect:**
+11. **OAuth 2.0 Resource Server** - JWT token validation (employees-backend-oauth2)
+12. **OAuth 2.0 Client** - Authorization Code Flow (employees-frontend-oauth2)
+13. **Keycloak Integration** - Identity and Access Management
+14. **JWT Token Handling** - Parsing, validation, claims extraction
+15. **Token Propagation** - Forwarding tokens between services
+16. **PKCE (Proof Key for Code Exchange)** - Enhanced security for OAuth2
+17. **Single Sign-On (SSO)** - Unified authentication across apps
+18. **Role-Based Access Control (RBAC)** - Fine-grained authorization
+
+**Spring Security:**
+19. **Form-Based Authentication** - Traditional login (employees-standalone-form-spring-security)
+20. **Password Hashing** - Argon2 password encoder
+21. **Method Security** - `@Secured`, `@PreAuthorize` annotations
+22. **CSRF Protection** - Cross-Site Request Forgery prevention
+23. **Session Management** - HttpOnly cookies, session timeout
+24. **User Details Service** - Database-backed authentication
+
+**Advanced Concepts:**
+25. **Stateless vs Stateful** - Token-based vs session-based auth
+26. **Microservices Security** - Service-to-service authentication
+27. **API Gateway Pattern** - Centralized authentication/authorization
+28. **Zero Trust Security** - Always verify, never trust
+29. **Security Testing** - Unit tests with Spring Security Test
+30. **Compliance** - OWASP best practices, secure coding standards
 
 ### Troubleshooting
 
