@@ -28,7 +28,7 @@
                 alert("Hello!");
             </script>
         -->
-        <td th:utext="${employee.name}"></td>
+        <td th:text="${employee.name}"></td>
         <td>
             <a th:href="@{/employees(id=${employee.id})}">View</a>
         </td>
