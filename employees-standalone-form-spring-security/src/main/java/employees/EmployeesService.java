@@ -2,6 +2,7 @@ package employees;
 
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +23,8 @@ public class EmployeesService {
         return toDto(repository.findById(id).orElseThrow(notFountException(id)));
     }
 
+    //itt lehetne validálni is a command-ot, spring security annotációkkal
+    @PreAuthorize("hasRole('ADMIN')")
     public EmployeeModel createEmployee(EmployeeModel command) {
         var employee = new Employee(command.name());
         repository.save(employee);
