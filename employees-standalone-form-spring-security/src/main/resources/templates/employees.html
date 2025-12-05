@@ -20,7 +20,15 @@
     <tbody>
     <tr th:each="employee : ${employees}">
         <td th:text="${employee.id}"></td>
-        <td th:text="${employee.name}"></td>
+        <!-- utext -> unescaped -->
+
+        <!--
+            ezt ha megeszi a db, akkor ez végre is hatja
+            <script type="text/javascript">
+                alert("Hello!");
+            </script>
+        -->
+        <td th:utext="${employee.name}"></td>
         <td>
             <a th:href="@{/employees(id=${employee.id})}">View</a>
         </td>
