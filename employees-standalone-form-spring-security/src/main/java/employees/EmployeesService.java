@@ -1,6 +1,7 @@
 package employees;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PostAuthorize;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,12 +19,16 @@ public class EmployeesService {
         return repository.findAllResources();
     }
 
+    //visszatérési értékekre is meglehet adni a jogosultságokat
+    //pre előre, post, a visszatérési értékkel dolgozik
+    @PostAuthorize("T(java.lang.Character).isUpperCase(returnObject[0]) or hasRole('ADMIN')")
     public EmployeeModel findEmployeeById(long id) {
         return toDto(repository.findById(id).orElseThrow(notFountException(id)));
     }
 
     //itt lehetne validálni is a command-ot, spring security annotációkkal
     //ha a service-rétegben van, akkor minden controller-t, vagy ide áthívő service-t fedünk
+    //ide jöhet bármilyen SPEL kifejezés is
     @PreAuthorize("hasRole('ADMIN')")
     public EmployeeModel createEmployee(EmployeeModel command) {
         var employee = new Employee(command.name());
