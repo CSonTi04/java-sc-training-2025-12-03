@@ -1,6 +1,5 @@
 package employees;
 
-import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
@@ -24,6 +23,7 @@ public class EmployeesService {
     }
 
     //itt lehetne validálni is a command-ot, spring security annotációkkal
+    //ha a service-rétegben van, akkor minden controller-t, vagy ide áthívő service-t fedünk
     @PreAuthorize("hasRole('ADMIN')")
     public EmployeeModel createEmployee(EmployeeModel command) {
         var employee = new Employee(command.name());
