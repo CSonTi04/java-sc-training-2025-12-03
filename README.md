@@ -20,6 +20,12 @@ This repository contains comprehensive examples and demonstrations of Java's cry
   - [10. Certificate Chains](#10-certificate-chains)
   - [11. JAR Signing](#11-jar-signing)
   - [12. HTTPS/TLS Certificates](#12-httpstls-certificates)
+- [OAuth 2.0 Authentication with Keycloak](#oauth-20-authentication-with-keycloak)
+  - [OAuth 2.0 Authorization Code Grant Flow Diagram](#oauth-20-authorization-code-grant-flow-diagram)
+  - [Flow Components](#flow-components)
+  - [Detailed Flow Steps](#detailed-flow-steps)
+  - [Security Features](#security-features-in-this-flow)
+  - [Keycloak Benefits](#keycloak-benefits)
 - [Employee Management Projects](#employee-management-projects)
   - [Architecture Overview](#architecture-overview)
   - [employees-backend](#employees-backend)
@@ -1930,6 +1936,222 @@ Browser cache showing old certificate
 - [DigiCert](https://www.digicert.com/) - Commercial, EV certificates
 - [GlobalSign](https://www.globalsign.com/) - Commercial
 - [Sectigo (formerly Comodo)](https://sectigo.com/) - Commercial
+
+## OAuth 2.0 Authentication with Keycloak
+
+This section explains the OAuth 2.0 Authorization Code Grant flow with Keycloak, a comprehensive identity and access management solution.
+
+### OAuth 2.0 Authorization Code Grant Flow Diagram
+
+The following diagram illustrates the complete OAuth 2.0 Authorization Code Grant flow (PKCE - Proof Key for Code Exchange):
+
+![OAuth 2.0 Authorization Code Grant Flow with Keycloak](./images/keycloack.png)
+
+### Flow Components
+
+**Three Main Actors:**
+
+1. **Felhasználó, böngészővel** (User with Browser)
+   - The end user initiating the login process
+   - Interacts with the client application through a web browser
+
+2. **Client Frontend alkalmazás** (Client Frontend Application)
+   - The web application the user is accessing
+   - Initiates OAuth flow and handles redirects
+   - Stores tokens (access_token, refresh_token, id_token) in Session/Cache
+
+3. **Authorization Server - Keycloak** (Keycloak)
+   - Central identity provider
+   - Authenticates users
+   - Issues security tokens (access token, refresh token, id token)
+   - Provides public key for token verification
+
+4. **Resource Server Backend alkalmazás** (Resource Server Backend Application)
+   - Protected API that requires valid tokens
+   - Validates access tokens
+   - Returns user resources if token is valid
+   - Uses Keycloak's public key to verify token signatures
+
+### Detailed Flow Steps
+
+#### Step 1: Application Registration and Initial Request (Alkalmazás felkeresése)
+- User accesses the client frontend application
+- Application initiates OAuth 2.0 flow with PKCE support
+- **Request parameters:**
+  - `response_type=code` - Request authorization code
+  - `client_id` - Application identifier
+  - `scope` - Requested permissions
+  - `state` - CSRF protection token
+  - `redirect_uri` - Where to return after authentication
+  - `nonce` - Token validation parameter
+  - `code_challenge` - PKCE: Derived from code verifier
+  - `code_challenge_method` - PKCE: Usually "S256" (SHA256)
+
+#### Step 2: User Authentication and Consent (Bejelentkezési kérés, bejelentkezés, consent)
+- User is redirected to Keycloak login page
+- User authenticates with credentials (username/password, MFA, etc.)
+- User grants permission to the application
+- **Keycloak returns:**
+  - `state` - Original state parameter (CSRF protection)
+  - `session_state` - Keycloak session identifier
+  - `iss` (issuer) - Authorization server identity
+  - `code` - Authorization code (short-lived, ~10 minutes)
+
+#### Step 3: Authorization Code Exchange (Oldal lekérése)
+- Frontend application receives the authorization code
+- Validates state parameter matches original request
+- Sends authorization code back to backend
+- **Authorization header parameters:**
+  - `grant_type=authorization_code` - Token grant type
+  - `redirect_uri` - Must match initial request
+  - `code` - Authorization code from step 2
+  - `code_verifier` - PKCE: Original random value
+  - Client credentials (via Basic Auth or client secret)
+
+#### Step 4: Token Request (Token lekérése)
+- Backend sends code and code_verifier to Keycloak token endpoint
+- Keycloak verifies:
+  - Authorization code validity
+  - Code hasn't been used before
+  - code_verifier matches original code_challenge
+  - Client credentials are valid
+  - Redirect URI matches
+- **Keycloak returns tokens:**
+  - `access_token` - JWT token for API access (short-lived, ~5 minutes)
+  - `refresh_token` - Token to obtain new access tokens (long-lived, ~30 days)
+  - `id_token` - JWT containing user information (OpenID Connect)
+  - `token_type` - "Bearer"
+  - `expires_in` - Access token expiration time
+
+#### Step 5: Token Storage (Token tárolása)
+- Tokens are securely stored:
+  - In **Session** (Server-side): Secure, HttpOnly cookie
+  - In **Cache** (Server-side): In-memory store
+  - NOT in browser localStorage (XSS vulnerability)
+- Server maintains:
+  - `access_token` - For API requests
+  - `refresh_token` - For obtaining new tokens
+  - `id_token` - User identity information
+
+#### Step 6: Resource Request (Erőforrás lekérése)
+- Client sends API request to Resource Server Backend
+- Includes `access_token` in Authorization header:
+  ```
+  Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+  ```
+- Backend receives request and validates token
+
+#### Step 7: Public Key Retrieval and Token Validation (Publikus kulcs lekérése)
+- Resource Server Backend requests `publikus kulcs` (public key) from Keycloak
+- Keycloak provides RSA public key for signature verification
+- Backend validates token by:
+  1. Verifying JWT signature using public key
+  2. Checking token expiration (`exp` claim)
+  3. Verifying issuer (`iss` claim) matches Keycloak URL
+  4. Checking required claims and scopes
+- If valid: Grant access to protected resource
+- If invalid: Return 401 Unauthorized
+
+### Security Features in This Flow
+
+**PKCE (Proof Key for Code Exchange):**
+- Protects against authorization code interception attacks
+- `code_challenge` prevents attackers from exchanging captured codes
+- Mandatory for public clients (SPAs, mobile apps)
+- `code_verifier` proves code ownership
+
+**State Parameter:**
+- Prevents CSRF (Cross-Site Request Forgery) attacks
+- Frontend generates random state
+- Must match state returned in callback
+- Validated before processing authorization code
+
+**Short-Lived Access Tokens:**
+- Access tokens expire quickly (typically 5-15 minutes)
+- Limits damage if token is compromised
+- Requires refresh token for new access tokens
+
+**Refresh Token Rotation:**
+- New refresh token issued with each access token refresh
+- Old refresh token automatically invalidated
+- Reduces attack surface
+
+**Token Encryption and Signing:**
+- Tokens are JWTs: digitally signed (not encrypted)
+- Signature verifies token hasn't been tampered with
+- Public key allows any service to verify tokens
+- Keycloak is only service that can create/sign tokens
+
+### Keycloak Benefits
+
+✅ **Centralized Authentication** - Single source of truth for user identity
+✅ **Multiple Authentication Methods** - Username/password, social login, MFA, LDAP
+✅ **Token Management** - Automatic token expiration and refresh
+✅ **User Management** - User creation, roles, permissions
+✅ **Fine-Grained Authorization** - Scopes, roles, attributes
+✅ **Audit Logging** - Track all authentication events
+✅ **High Availability** - Cluster support, load balancing
+✅ **Multi-Tenancy** - Support for multiple realms (isolated domains)
+✅ **Protocol Support** - OpenID Connect, OAuth 2.0, SAML 2.0
+✅ **Custom Extensions** - Theme customization, event listeners
+
+### Related Projects in Repository
+
+The following projects in this repository demonstrate OAuth 2.0 with Keycloak:
+
+- **employees-backend-oauth2** - REST API protected with OAuth 2.0 tokens
+- **employees-frontend-oatuh2** - Frontend application with OAuth 2.0 integration
+
+### Common Use Cases
+
+**1. Web Application Authorization**
+```
+User → Web App (Frontend) → Keycloak (Login) → Web App → REST API
+```
+
+**2. Mobile App Authorization**
+```
+User → Mobile App → Keycloak (Login) → Mobile App → REST API
+```
+
+**3. Multiple Services with Single Sign-On (SSO)**
+```
+User → Service A → Keycloak (Login) → Service A
+User → Service B → Uses existing Keycloak session → Service B (no re-auth)
+```
+
+**4. Microservices Authorization**
+```
+API Gateway → Validates Token → Routes to Microservice
+Microservice → Can trust token (signed by Keycloak) → Process request
+```
+
+### Best Practices
+
+✅ **Always use HTTPS** - Protect tokens in transit
+✅ **Use PKCE** - Even for confidential clients
+✅ **Store tokens securely** - Server-side session, HttpOnly cookies
+✅ **Validate tokens completely** - Signature, expiration, issuer, scope
+✅ **Implement token refresh** - Refresh before expiration
+✅ **Short token lifetime** - 5-15 minutes for access tokens
+✅ **Longer refresh token lifetime** - 24 hours to 30 days
+✅ **Implement logout** - Invalidate tokens on logout
+✅ **Monitor for anomalies** - Track unusual authentication patterns
+✅ **Use strong client secrets** - Random, long strings (if needed)
+
+❌ **Never store tokens in localStorage** - Vulnerable to XSS attacks
+❌ **Never log tokens** - Could expose sensitive information
+❌ **Don't trust client-side claims** - Always validate on server
+❌ **Don't skip token validation** - Signature verification is critical
+❌ **Don't use unencrypted HTTP** - Tokens transmitted in plaintext
+
+### Additional Resources
+
+- [Keycloak Official Documentation](https://www.keycloak.org/documentation)
+- [OAuth 2.0 Specification (RFC 6749)](https://tools.ietf.org/html/rfc6749)
+- [PKCE Specification (RFC 7636)](https://tools.ietf.org/html/rfc7636)
+- [OpenID Connect Specification](https://openid.net/specs/openid-connect-core-1_0.html)
+- [Spring Security OAuth2 Guide](https://spring.io/guides/tutorials/spring-boot-oauth2/)
 
 ## Employee Management Projects
 
