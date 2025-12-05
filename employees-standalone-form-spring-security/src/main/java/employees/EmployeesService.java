@@ -18,7 +18,7 @@ public class EmployeesService {
 
     //visszatérési érték lista esetén lehet szűrni a visszatérési értéket
     //filterObject az aktuális elemre hivatkozik
-    @PostFilter("not T(java.lang.Character).isUpperCase(filterObject.name().charAt(0)) or hasRole('ADMIN')")
+    @PostFilter("T(java.lang.Character).isUpperCase(filterObject.name().charAt(0)) or hasRole('ADMIN')")
     public List<EmployeeModel> listEmployees() {
         return repository.findAllResources();
     }
