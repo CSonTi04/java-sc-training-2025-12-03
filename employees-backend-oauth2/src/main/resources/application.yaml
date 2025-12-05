@@ -10,6 +10,12 @@ spring:
     open-in-view: false
   liquibase:
     change-log: classpath:db/db-changelog.yaml
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://auth-server:8090/auth/realms/EmployeesRealm
+
 
 management:
   endpoints:
