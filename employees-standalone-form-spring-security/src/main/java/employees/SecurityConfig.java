@@ -30,7 +30,7 @@ public class SecurityConfig {
                                         //hogy lehet ezt a hibát kivédeni?
                                         //írjunk rá automatizált teszteket, és ellenőrizzük, hogy a megfelelő szerepkörrel csak a megfelelő funkciók érhetők el
                                         //.requestMatchers("/**").hasRole("USER")//itt vigyázzunk, hogy ne legyen /**, mert akkor minden engedélyezve lesz a USER-nek
-                                        .requestMatchers("/").hasRole("USER")//itt vigyázzunk, hogy ne legyen /**, mert akkor minden engedélyezve lesz a USER-nek
+                                        .requestMatchers("/","/employees").hasRole("USER")//itt vigyázzunk, hogy ne legyen /**, mert akkor minden engedélyezve lesz a USER-nek
                                         .requestMatchers("/create-employee").hasRole("ADMIN")
                                         .anyRequest().denyAll()
                 )
