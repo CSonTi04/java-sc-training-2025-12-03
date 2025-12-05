@@ -2,6 +2,7 @@ package employees;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PostAuthorize;
+import org.springframework.security.access.prepost.PostFilter;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +16,9 @@ public class EmployeesService {
 
     private final EmployeesRepository repository;
 
+    //visszatérési érték lista esetén lehet szűrni a visszatérési értéket
+    //filterObject az aktuális elemre hivatkozik
+    @PostFilter("not T(java.lang.Character).isUpperCase(filterObject.name().charAt(0)) or hasRole('ADMIN')")
     public List<EmployeeModel> listEmployees() {
         return repository.findAllResources();
     }
