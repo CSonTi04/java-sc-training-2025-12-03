@@ -34,6 +34,7 @@ public class SecurityConfig {
                                         .requestMatchers("/create-employee").hasRole("ADMIN")
                                         .anyRequest().denyAll()
                 )
+                .headers(headers -> headers.contentSecurityPolicy( policy -> policy.policyDirectives("script-src 'self'")))
                 .formLogin(Customizer.withDefaults())
                 .logout(Customizer.withDefaults());
         return http.build();
