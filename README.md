@@ -31,6 +31,11 @@ This repository contains comprehensive examples and demonstrations of Java's cry
   - [employees-backend](#employees-backend)
   - [employees-frontend](#employees-frontend)
   - [employees-standalone-form](#employees-standalone-form)
+  - [employees-backend-oauth2](#employees-backend-oauth2)
+  - [employees-frontend-oauth2](#employees-frontend-oauth2)
+  - [employees-standalone-form-spring-security](#employees-standalone-form-spring-security)
+  - [Database Setup](#database-setup)
+  - [Learning Outcomes](#learning-outcomes)
 - [Running the Examples](#running-the-examples)
 - [Additional Reading](#additional-reading)
 - [Best Practices](#best-practices)
@@ -121,6 +126,49 @@ employees-standalone-form/
     ├── static/                            # CSS, JavaScript, images
     ├── db/changelog/                      # Liquibase database migrations
     └── application.properties             # Configuration properties
+
+employees-backend-oauth2/
+├── pom.xml
+├── src/main/java/employees/
+│   ├── EmployeesApplication.java          # Spring Boot REST API with OAuth2
+│   ├── SecurityConfig.java                # OAuth2 Resource Server configuration
+│   ├── EmployeesController.java           # REST endpoints with @PreAuthorize
+│   ├── EmployeesService.java              # Business logic layer
+│   ├── EmployeesRepository.java           # Database persistence (JPA)
+│   ├── Employee.java                      # Entity model
+│   └── EmployeeResource.java              # DTO for API responses
+└── src/main/resources/
+    ├── db/changelog/                      # Liquibase database migrations
+    └── application.yaml                   # OAuth2 Resource Server config
+
+employees-frontend-oauth2/
+├── pom.xml
+├── src/main/java/employees/
+│   ├── EmployeesFrontendApplication.java  # Spring Boot OAuth2 Client app
+│   ├── SecurityConfig.java                # OAuth2 Client configuration
+│   ├── EmployeesController.java           # Web UI controller
+│   ├── EmployeesClient.java               # REST client with token propagation
+│   └── Employee.java                      # DTO model
+└── src/main/resources/
+    ├── templates/                         # Thymeleaf HTML templates
+    ├── static/                            # CSS, JavaScript, images
+    └── application.yaml                   # OAuth2 Client config (Keycloak)
+
+employees-standalone-form-spring-security/
+├── pom.xml
+├── src/main/java/employees/
+│   ├── EmployeesApplication.java          # Spring Boot app with Spring Security
+│   ├── SecurityConfig.java                # Form login + RBAC configuration
+│   ├── EmployeesController.java           # Web UI controller with @Secured
+│   ├── EmployeesService.java              # Business logic layer
+│   ├── EmployeesRepository.java           # Database persistence (JPA)
+│   ├── Employee.java                      # Entity model
+│   └── CreateEmployeeCommand.java         # Form command object
+└── src/main/resources/
+    ├── templates/                         # Thymeleaf HTML templates
+    ├── static/                            # CSS, JavaScript, images
+    ├── db/changelog/                      # Liquibase migrations (users + employees)
+    └── application.yaml                   # Spring Security configuration
 ```
 
 ## Topics Covered
